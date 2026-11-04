@@ -1,5 +1,5 @@
 // =========================================================
-// 設定画面：バックアップ・学習の設定・データについて
+// 設定画面：バックアップ・学習の設定・読み上げの速さ・データについて
 // =========================================================
 import { getSettings, saveSettings, listDecksWithCounts, exportAllData, replaceAllData } from '../data.js';
 import { makeBackup, parseBackup, backupFileName } from '../backup.js';
@@ -8,6 +8,7 @@ import { formatDateTimeJa } from '../util.js';
 import { confirmDialog, alertDialog, showToast, downloadFile } from '../ui.js';
 import { replaceLocation } from '../nav.js';
 import { installState, promptInstall, onInstallChange } from '../install.js';
+import { SPEECH_RATES, canSpeak, speak } from '../speech.js';
 
 export const title = '設定';
 
@@ -75,6 +76,17 @@ export async function render(el, { refresh, signal }) {
     </section>
 
     <section class="card">
+      <h3>🔊 読み上げの速さ</h3>
+      ${canSpeak() ? `
+        <select id="rate-select" aria-label="読み上げの速さ" style="margin-top:10px">
+          ${SPEECH_RATES.map(({ value, label }) => `
+            <option value="${value}" ${value === settings.speechRate ? 'selected' : ''}>${label}</option>`).join('')}
+        </select>
+        <p class="muted" style="margin-top:10px">選ぶと、ためしに読み上げます。読み上げる言語と「自動で読む」は、単語帳ごとの画面で設定します。</p>`
+        : '<p class="muted">このブラウザでは読み上げを使えません。</p>'}
+    </section>
+
+    <section class="card">
       <h3>データについて</h3>
       <dl class="info-list">
         <dt>入っているもの</dt><dd>単語帳 ${decks.length}冊・単語 ${totalCards}語</dd>
@@ -99,6 +111,16 @@ export async function render(el, { refresh, signal }) {
     const graceHour = Number(event.target.value);
     await saveSettings({ graceHour });
     showToast(graceHour === 0 ? '猶予時刻を使わないようにしました' : `猶予時刻を午前${graceHour}時にしました`);
+  });
+
+  // ---- 読み上げの速さ（選んだらすぐ保存して、ためしに読む） ----
+  el.querySelector('#rate-select')?.addEventListener('change', async (event) => {
+    const speechRate = Number(event.target.value);
+    await saveSettings({ speechRate });
+    const label = SPEECH_RATES.find((rate) => rate.value === speechRate)?.label ?? '';
+    showToast(`読み上げの速さを「${label}」にしました`);
+    speak('Good morning.', 'en-US', { rate: speechRate });
+    speak('おはようございます', 'ja-JP', { rate: speechRate, queue: true });
   });
 
   // ---- バックアップを保存 ----

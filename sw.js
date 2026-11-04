@@ -32,6 +32,7 @@ const PRECACHE = [
   'js/wallet.js',
   'js/bingo.js',
   'js/trophies.js',
+  'js/speech.js',
   'js/importer.js',
   'js/backup.js',
   'js/ui.js',

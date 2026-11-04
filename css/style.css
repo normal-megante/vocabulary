@@ -584,6 +584,52 @@ a.deck-item:active { background: var(--surface-2); }
 }
 .tap-hint { color: var(--muted); font-size: 13px; }
 
+/* ----- 読み上げ（🔊） ----- */
+.speak-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  max-width: 100%;
+}
+.speak-line > div { min-width: 0; }
+.speak-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  font-size: 18px;
+  line-height: 1;
+  vertical-align: middle;
+  cursor: pointer;
+}
+.speak-btn:active { transform: scale(0.92); }
+.speak-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.card-example .speak-btn { width: 32px; height: 32px; font-size: 15px; }
+.speak-answer { margin-bottom: 6px; }
+.lang-row {
+  display: grid;
+  grid-template-columns: 2em 1fr;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+.lang-try {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+.lang-try .btn { flex: none; }
+
 /* ----- アイテム（ヒント・選択肢表示） ----- */
 .tag.assist { background: rgba(255, 176, 32, 0.25); color: var(--text); }
 .hint-slot:empty { display: none; }

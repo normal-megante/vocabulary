@@ -9,6 +9,12 @@ import { confirmDialog, promptDialog, showToast, alertDialog } from '../ui.js';
 import { replaceLocation } from '../nav.js';
 import { GOAL_LABEL } from '../defaults.js';
 import { bingoMessage } from '../bingo.js';
+import { SPEECH_LANGS, canSpeak, deckLang, langLabel, speak } from '../speech.js';
+
+// 読み上げの言語の選択肢
+function langOptions(selected) {
+  return SPEECH_LANGS.map(({ id, label }) => `<option value="${id}" ${id === selected ? 'selected' : ''}>${label}</option>`).join('');
+}
 
 export const title = '単語帳';
 
@@ -93,6 +99,26 @@ export async function render(el, { params, setTitle, refresh }) {
             <label><input type="radio" name="directions" value="${value}" ${deck.directions === value ? 'checked' : ''}> ${label}</label>`).join('')}
         </div>
 
+        <span class="field-label">🔊 読み上げ</span>
+        ${canSpeak() ? '' : '<p class="muted hint">このブラウザでは読み上げを使えません。</p>'}
+        <div class="lang-row">
+          <label for="front-lang">表</label>
+          <select id="front-lang">${langOptions(deck.frontLang)}</select>
+        </div>
+        <div class="lang-row">
+          <label for="back-lang">裏</label>
+          <select id="back-lang">${langOptions(deck.backLang)}</select>
+        </div>
+        <div class="radio-list">
+          <label><input type="checkbox" id="auto-speak" ${deck.autoSpeak ? 'checked' : ''}> 学習中、問題や答えが出たら自動で読み上げる</label>
+        </div>
+        <p class="muted hint">読まなくていい側は「読まない」にすると、自動で読むときも読みません（例：日本語の意味は読まない）。</p>
+        ${cards.length > 0 && canSpeak() ? `
+          <div class="lang-try">
+            <span class="muted hint" id="lang-preview"></span>
+            <button class="btn small" type="button" id="try-speak">🔊 ためしに聞く</button>
+          </div>` : ''}
+
         <button class="btn primary block" type="submit" style="margin-top:8px">設定を保存</button>
       </form>
     </section>
@@ -104,6 +130,38 @@ export async function render(el, { params, setTitle, refresh }) {
 
   if (cards.length > 0) setupWordList(el, deckUrl, cards);
 
+  // ---- 読み上げの設定 ----
+  // 画面で選んでいる読み上げの設定（保存前のものも）
+  function speechChoices() {
+    return {
+      frontLang: el.querySelector('#front-lang').value,
+      backLang: el.querySelector('#back-lang').value,
+      autoSpeak: el.querySelector('#auto-speak').checked,
+    };
+  }
+  // 最初の単語で「何語で読むか」を見せる
+  const sample = cards[0];
+  function updatePreview() {
+    const preview = el.querySelector('#lang-preview');
+    if (!preview || !sample) return;
+    const choices = { ...deck, ...speechChoices() };
+    const part = (text, side) => {
+      const lang = deckLang(choices, side, text);
+      return `「${escapeHtml(text)}」→ ${lang ? langLabel(lang) : '読まない'}`;
+    };
+    preview.innerHTML = `${part(sample.front, 'front')}<br>${part(sample.back, 'back')}`;
+  }
+  updatePreview();
+  el.querySelector('#front-lang').addEventListener('change', updatePreview);
+  el.querySelector('#back-lang').addEventListener('change', updatePreview);
+  el.querySelector('#try-speak')?.addEventListener('click', async () => {
+    const choices = { ...deck, ...speechChoices() };
+    const { speechRate } = await getSettings();
+    const front = speak(sample.front, deckLang(choices, 'front', sample.front), { rate: speechRate });
+    const back = speak(sample.back, deckLang(choices, 'back', sample.back), { rate: speechRate, queue: true });
+    if (!front && !back) showToast('表も裏も「読まない」になっています');
+  });
+
   // この単語帳の設定を保存
   el.querySelector('#settings-form').addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -114,7 +172,7 @@ export async function render(el, { params, setTitle, refresh }) {
       return;
     }
     const directions = el.querySelector('input[name="directions"]:checked').value;
-    const updated = await updateDeck(deck.id, { dailyGoal, newPerDay, directions });
+    const updated = await updateDeck(deck.id, { dailyGoal, newPerDay, directions, ...speechChoices() });
     // 問題数を下げて、もう届いていたら達成にする（スタンプも見直す）
     const { graceHour } = await getSettings();
     const recheck = await recheckDeckToday(updated, graceHour);

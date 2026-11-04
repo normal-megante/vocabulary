@@ -10,6 +10,7 @@
 // 夜中の猶予の時間に、前の日のきょうのぶんがまだなら、前の日の分として数えます（stamps.js）。
 // めくる・入力の問題では、アイテム（💡 ヒント・🔢 選択肢表示）を使えます。
 //   使って答えた単語は、正解でも段階を上げずに明日もう一度出します（srs.js の assisted）。
+// 問題・答え・例文の 🔊 で読み上げ。単語帳の「自動で読む」がオンなら、問題が出たときと答えが出たときに読みます（speech.js）。
 // =========================================================
 import {
   getDeck, updateDeck, listCards, listProgress, getDaily, recordAnswer, getSettings, getStudyDay, claimTrophies,
@@ -25,6 +26,7 @@ import {
 import { escapeHtml } from '../util.js';
 import { showToast } from '../ui.js';
 import { GOAL_LABEL, EXTRA_SESSION_SIZE, REASK_GAP, ITEMS, ASSIST_INTERVAL } from '../defaults.js';
+import { canSpeak, deckLang, speak, stopSpeaking } from '../speech.js';
 
 export const title = '学習';
 
@@ -68,7 +70,9 @@ export async function render(el, { params, setTitle, signal }) {
     return;
   }
   const choiceOk = canUseChoice(cards, deck.directions);
-  const { graceHour } = await getSettings();
+  const { graceHour, speechRate } = await getSettings();
+  const speakable = canSpeak();
+  signal.addEventListener('abort', stopSpeaking); // 画面を離れたら、読み上げを止める
 
   // 今回の学習のようす
   const session = {
@@ -215,13 +219,25 @@ export async function render(el, { params, setTitle, signal }) {
     if (current.assist.choices) formatTag = `<span class="tag assist">${ITEMS.choices.icon} 4択にした</span>`;
     else if (session.format === 'auto') formatTag = `<span class="tag">${FORMATS.find((f) => f.id === format).label}</span>`;
 
+    // 読み上げる文字と言語（読まない・読めないときは lang が null）
+    const example = item.card.example;
+    current.speech = speakable ? {
+      question: { text: question, lang: deckLang(deck, item.dir === 'f' ? 'front' : 'back', question) },
+      answer: { text: answer, lang: deckLang(deck, item.dir === 'f' ? 'back' : 'front', answer) },
+      example: { text: example, lang: deckLang(deck, 'example', example) },
+    } : null;
+
     // 答えのあとに見せる例文・メモ（4択では答えの文字は選択肢にあるので出さない）
     const details = `
-      ${item.card.example ? `<div class="card-example">${escapeHtml(item.card.example)}</div>` : ''}
+      ${example ? `<div class="card-example">${escapeHtml(example)}${speakButton('example', '例文を読み上げる')}</div>` : ''}
       ${item.card.note ? `<div class="card-note">📝 ${escapeHtml(item.card.note)}</div>` : ''}`;
     const answerBlock = format === 'choice' && !details.trim() ? '' : `
       <div class="card-answer" hidden>
-        ${format === 'choice' ? '' : `<div class="card-answer-text ${sizeClass(answer)}">${escapeHtml(answer)}</div>`}
+        ${format === 'choice' ? '' : `
+          <div class="speak-line">
+            <div class="card-answer-text ${sizeClass(answer)}">${escapeHtml(answer)}</div>
+            ${speakButton('answer', '答えを読み上げる')}
+          </div>`}
         ${details}
       </div>`;
 
@@ -238,7 +254,10 @@ export async function render(el, { params, setTitle, signal }) {
 
         <section ${cardAttrs}>
           <div class="card-tags"><span class="tag">${DIR_LABELS[item.dir]}</span>${formatTag}${badge}</div>
-          <div class="card-question ${sizeClass(question)}">${escapeHtml(question)}</div>
+          <div class="speak-line">
+            <div class="card-question ${sizeClass(question)}">${escapeHtml(question)}</div>
+            ${speakButton('question', '問題を読み上げる')}
+          </div>
           <div class="hint-slot">${current.assist.hint ? hintHtml(answer) : ''}</div>
           ${answerBlock}
           ${format === 'flip' ? '<p class="tap-hint">タップして答えを見る</p>' : ''}
@@ -260,8 +279,38 @@ export async function render(el, { params, setTitle, signal }) {
         { opacity: 0, transform: 'translateX(24px)' },
         { opacity: 1, transform: 'none' },
       ], 180);
+      // 新しい問題：前の読み上げを止めて、「自動で読む」なら問題を読む
+      stopSpeaking();
+      if (deck.autoSpeak) speakPart('question');
     }
   }
+
+  // =======================================================
+  // 読み上げ（🔊）
+  // =======================================================
+  function speakButton(part, label) {
+    if (!current?.speech?.[part]?.lang) return '';
+    return `<button class="speak-btn" type="button" data-speak="${part}" aria-label="${label}">🔊</button>`;
+  }
+
+  // part：'question' / 'answer' / 'example'
+  function speakPart(part) {
+    const target = current?.speech?.[part];
+    if (target?.lang) speak(target.text, target.lang, { rate: speechRate });
+  }
+
+  // 答えが出たとき（めくった・答えた）：「自動で読む」なら答えを読む
+  function autoSpeakAnswer() {
+    if (deck.autoSpeak) speakPart('answer');
+  }
+
+  // 🔊 を押したとき（カードをタップしたことにならないように、先に受け取って止める）
+  el.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-speak]');
+    if (!button || !el.contains(button)) return;
+    event.stopPropagation();
+    speakPart(button.dataset.speak);
+  }, { capture: true, signal });
 
   // =======================================================
   // アイテム（💡 ヒント・🔢 選択肢表示）
@@ -407,6 +456,7 @@ export async function render(el, { params, setTitle, signal }) {
     }
     el.querySelector('#reveal-btn').hidden = true;
     el.querySelector('.grade-buttons').hidden = false;
+    autoSpeakAnswer();
   }
 
   // =======================================================
@@ -448,7 +498,10 @@ export async function render(el, { params, setTitle, signal }) {
       else if (i === index) button.classList.add('wrong');
     });
     const answer = choices.options[choices.correctIndex];
-    showFeedback(right, right ? '' : `<p>正解は「<b>${escapeHtml(answer)}</b>」</p>`);
+    const listen = current.speech?.answer.lang
+      ? '<button class="btn small speak-answer" type="button" data-speak="answer">🔊 正解を聞く</button>' : '';
+    showFeedback(right, (right ? '' : `<p>正解は「<b>${escapeHtml(answer)}</b>」</p>`) + listen);
+    autoSpeakAnswer();
   }
 
   // =======================================================
@@ -518,6 +571,7 @@ export async function render(el, { params, setTitle, signal }) {
     if (text === null) extra = '<p>答えを見て、覚えておきましょう。</p>';
     else if (!right) extra = `<p class="muted">あなたの答え：${escapeHtml(text)}</p>`;
     showFeedback(right, extra, text === null ? '😣 答えはこちら' : null);
+    autoSpeakAnswer();
   }
 
   // =======================================================

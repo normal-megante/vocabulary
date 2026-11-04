@@ -5,7 +5,7 @@
 // =========================================================
 
 // アプリのバージョン（設定画面に表示）
-export const APP_VERSION = '0.11.0（ステップ11）';
+export const APP_VERSION = '0.12.0（ステップ12）';
 
 // 「1日に解く問題数の目標」の呼び名（画面に出る言葉）
 // （候補だったもの：ノルマ／今日のめやす／デイリーミッション。ここを書き換えれば全部の画面が変わる）
@@ -17,12 +17,16 @@ export const DECK_DEFAULTS = {
   newPerDay: 10,       // 1日に出す新しい単語の数
   directions: 'both',  // 出題の向き：'both'=両方, 'forward'=表→裏だけ, 'backward'=裏→表だけ
   studyFormat: 'flip', // 前回えらんだ出し方：'flip'=めくる, 'choice'=4択, 'type'=入力, 'auto'=おまかせ
+  frontLang: 'auto',   // 表を読み上げる言語：'auto'=文字を見て決める, 'off'=読まない, 'en-US' など（speech.js の SPEECH_LANGS）
+  backLang: 'auto',    // 裏を読み上げる言語
+  autoSpeak: false,    // 学習中に、問題や答えが出たら自動で読み上げるか
 };
 
 // アプリ全体の初期設定
 export const APP_DEFAULTS = {
   graceHour: 3,        // 猶予時刻：0時〜この時刻までは、前日が未達成なら前日の分として数える
   lastBackupAt: null,  // 最後にバックアップした日時（アプリが自動で記録する）
+  speechRate: 1,       // 読み上げの速さ（0.7＝ゆっくり、1＝ふつう、1.3＝はやい）
 };
 
 // ---- バックアップ ----
