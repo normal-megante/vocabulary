@@ -4,7 +4,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   buildChoices, canUseChoice, checkTyped, acceptedAnswers, pickFormat, shuffle, answerOf, CHOICE_COUNT,
+  stageFormat, FORMATS, MIXED_FORMATS,
 } from '../js/quiz.js';
+import { STAGE_FROM } from '../js/defaults.js';
 
 const card = (id, front, back) => ({ id, deckId: 'd1', front, back, example: '', note: '' });
 const deck = [
@@ -94,6 +96,28 @@ test('出し方：おまかせは3種類から、4択が作れない問題はめ
   assert.equal(pickFormat('choice', false), 'flip');
   assert.equal(pickFormat('choice', true), 'choice');
   assert.equal(pickFormat('type', false), 'type');
+});
+
+test('出し方：ステップアップは段階で 4択 → めくる → 入力', () => {
+  // 段階0（新しい単語・忘れた単語）は4択
+  assert.equal(stageFormat(0, true), 'choice');
+  // 4択が作れない単語は、めくる
+  assert.equal(stageFormat(0, false), 'flip');
+  // めくる → 入力の区切り（defaults.js の STAGE_FROM）
+  assert.equal(stageFormat(STAGE_FROM.flip, true), 'flip');
+  assert.equal(stageFormat(STAGE_FROM.type - 1, true), 'flip');
+  assert.equal(stageFormat(STAGE_FROM.type, true), 'type');
+  assert.equal(stageFormat(7, false), 'type');
+  // pickFormat から使うとき（ランダムは使わない）
+  const never = () => { throw new Error('ステップアップでランダムは使わない'); };
+  assert.equal(pickFormat('stage', true, never, 0), 'choice');
+  assert.equal(pickFormat('stage', true, never, 2), 'flip');
+  assert.equal(pickFormat('stage', true, never, 5), 'type');
+  assert.equal(pickFormat('stage', true, never, undefined), 'choice');
+  // 一覧に入っていて、1問ごとに目印を出す出し方になっている
+  assert.ok(FORMATS.some((f) => f.id === 'stage'));
+  assert.ok(MIXED_FORMATS.includes('stage'));
+  assert.ok(STAGE_FROM.flip < STAGE_FROM.type);
 });
 
 test('並べ替えても中身は同じで、元の並びは変わらない', () => {

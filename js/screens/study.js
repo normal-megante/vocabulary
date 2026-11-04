@@ -5,6 +5,7 @@
 //   めくる … タップで答えを見て「忘れてた／あやしい／覚えてた」
 //   4択   … 4つから選ぶ → 正解を見せて「次へ」（正解は半分の重さ：srs.js）
 //   入力   … 答えを打ち込む → 答え合わせ →「次へ」（打ち間違いは「合ってたことにする」）
+//   おまかせ … 1問ごとにランダム／ステップアップ … 単語の段階で 4択 → めくる → 入力（quiz.js の stageFormat）
 // 1問ごとに保存するので、途中でやめても、それまでの分は記録されます。
 // （4択・入力は「次へ」を押したときに保存）
 // 夜中の猶予の時間に、前の日のきょうのぶんがまだなら、前の日の分として数えます（stamps.js）。
@@ -21,7 +22,7 @@ import { bingoMessage } from '../bingo.js';
 import { achievementEvents, trophyMessages } from '../trophies.js';
 import { buildQueue, schedule, nextLabel, isNew } from '../srs.js';
 import {
-  FORMATS, buildChoices, canUseChoice, checkTyped, compareKey, pickFormat, questionOf, answerOf, hintOf,
+  FORMATS, MIXED_FORMATS, buildChoices, canUseChoice, checkTyped, compareKey, pickFormat, questionOf, answerOf, hintOf,
 } from '../quiz.js';
 import { escapeHtml } from '../util.js';
 import { showToast } from '../ui.js';
@@ -45,6 +46,7 @@ const RESULT_LABELS = {
   choice: [['right', '⭕ 正解'], ['wrong', '❌ 不正解']],
   type: [['right', '⭕ 正解'], ['wrong', '❌ 不正解']],
   auto: [['right', '😊 できた'], ['hard', '🤔 あやしい'], ['wrong', '😣 できなかった']],
+  stage: [['right', '😊 できた'], ['hard', '🤔 あやしい'], ['wrong', '😣 できなかった']],
 };
 
 export async function render(el, { params, setTitle, signal }) {
@@ -138,13 +140,16 @@ export async function render(el, { params, setTitle, signal }) {
           ${FORMATS.map((f, i) => {
             const disabled = f.id === 'choice' && !choiceOk;
             const last = f.id === session.format;
+            let note = f.note;
+            if (disabled) note = '答えのちがう単語が4語以上あると使えます';
+            else if (f.id === 'stage' && !choiceOk) note = '覚えてきたら めくる → 入力 と進む（この単語帳は4択を作れないので、めくるから）';
             return `
               <button class="format-btn${last ? ' last' : ''}" type="button" data-format="${f.id}" ${disabled ? 'disabled' : ''}
                       aria-keyshortcuts="${i + 1}">
                 <span class="format-emoji" aria-hidden="true">${f.emoji}</span>
                 <span class="format-text">
                   <b>${f.label}</b>
-                  <span class="muted">${disabled ? '答えのちがう単語が4語以上あると使えます' : f.note}</span>
+                  <span class="muted">${note}</span>
                 </span>
                 ${last ? '<span class="tag">前回</span>' : ''}
               </button>`;
@@ -190,9 +195,9 @@ export async function render(el, { params, setTitle, signal }) {
   function showQuestion() {
     mode = 'question';
     const item = session.queue[session.index];
-    const wantsChoices = session.format === 'choice' || session.format === 'auto';
+    const wantsChoices = session.format === 'choice' || MIXED_FORMATS.includes(session.format);
     const choices = wantsChoices ? buildChoices(item.card, item.dir, cards) : null;
-    const format = pickFormat(session.format, Boolean(choices));
+    const format = pickFormat(session.format, Boolean(choices), Math.random, item.progress.level);
     current = {
       item, format, choices, revealed: false, answered: false, pending: null,
       assist: { hint: false, choices: false }, // この問題で使ったアイテム
@@ -217,7 +222,7 @@ export async function render(el, { params, setTitle, signal }) {
     else if (item.kind === 'reask') badge = '<span class="tag again">もう一度</span>';
     let formatTag = '';
     if (current.assist.choices) formatTag = `<span class="tag assist">${ITEMS.choices.icon} 4択にした</span>`;
-    else if (session.format === 'auto') formatTag = `<span class="tag">${FORMATS.find((f) => f.id === format).label}</span>`;
+    else if (MIXED_FORMATS.includes(session.format)) formatTag = `<span class="tag">${FORMATS.find((f) => f.id === format).label}</span>`;
 
     // 読み上げる文字と言語（読まない・読めないときは lang が null）
     const example = item.card.example;
@@ -735,7 +740,7 @@ export async function render(el, { params, setTitle, signal }) {
   }
 
   // ---- PC のキーボード操作 ----
-  //   出し方選び：1〜4
+  //   出し方選び：1〜5
   //   めくる：スペース／Enter でめくる、1・2・3 で採点
   //   4択：1〜4 で選ぶ、Enter で次へ
   //   入力：Enter で答え合わせ → もう一度 Enter で次へ

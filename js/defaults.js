@@ -5,7 +5,7 @@
 // =========================================================
 
 // アプリのバージョン（設定画面に表示）
-export const APP_VERSION = '0.12.0（ステップ12）';
+export const APP_VERSION = '0.13.0（ステップ13）';
 
 // 「1日に解く問題数の目標」の呼び名（画面に出る言葉）
 // （候補だったもの：ノルマ／今日のめやす／デイリーミッション。ここを書き換えれば全部の画面が変わる）
@@ -16,7 +16,7 @@ export const DECK_DEFAULTS = {
   dailyGoal: 20,       // 1日のきょうのぶん（問題数）。0 なら「きょうのぶん」とスタンプの対象外
   newPerDay: 10,       // 1日に出す新しい単語の数
   directions: 'both',  // 出題の向き：'both'=両方, 'forward'=表→裏だけ, 'backward'=裏→表だけ
-  studyFormat: 'flip', // 前回えらんだ出し方：'flip'=めくる, 'choice'=4択, 'type'=入力, 'auto'=おまかせ
+  studyFormat: 'flip', // 前回えらんだ出し方：'flip'=めくる, 'choice'=4択, 'type'=入力, 'auto'=おまかせ, 'stage'=ステップアップ
   frontLang: 'auto',   // 表を読み上げる言語：'auto'=文字を見て決める, 'off'=読まない, 'en-US' など（speech.js の SPEECH_LANGS）
   backLang: 'auto',    // 裏を読み上げる言語
   autoSpeak: false,    // 学習中に、問題や答えが出たら自動で読み上げるか
@@ -80,5 +80,8 @@ export const ITEMS = {
 export const ASSIST_INTERVAL = 1;
 
 // ---- 学習 ----
+// 出し方「ステップアップ」：単語の段階（覚え具合）がこの数以上になったら、次の出し方に進む
+//   段階 0 … 4択 → 段階 1〜2 … めくる → 段階 3 以上（1週間あけても覚えていた）… 入力
+export const STAGE_FROM = { flip: 1, type: 3 };
 export const EXTRA_SESSION_SIZE = 10;  // きょうのぶん達成後に「もう少しやる」ときの問題数
 export const REASK_GAP = 3;            // 「忘れてた」単語を、何問あとにもう一度出すか

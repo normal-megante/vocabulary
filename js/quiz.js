@@ -2,13 +2,14 @@
 // 出し方（めくる・4択・入力）のための計算
 //   ・4択の選択肢づくり
 //   ・入力した答えの判定
-//   ・「おまかせ」のときの出し方選び
+//   ・「おまかせ」「ステップアップ」のときの出し方選び
 //
 // 画面とは関係のない「計算だけ」のファイル。
 // tests/quiz.test.mjs で動きを確かめられる。
 // =========================================================
 import { normalizeKey } from './util.js';
 import { directionsOf } from './srs.js';
+import { STAGE_FROM } from './defaults.js';
 
 // 出し方の一覧（学習を始めるときに選ぶ）
 export const FORMATS = [
@@ -16,7 +17,11 @@ export const FORMATS = [
   { id: 'choice', emoji: '🔢', label: '4択', note: '4つの中から選ぶ（正解は半分の重さ）' },
   { id: 'type', emoji: '⌨️', label: '入力', note: '答えを打ち込む' },
   { id: 'auto', emoji: '🎲', label: 'おまかせ', note: '1問ごとに出し方が変わる' },
+  { id: 'stage', emoji: '🪜', label: 'ステップアップ', note: '覚えてきたら 4択 → めくる → 入力 と進む' },
 ];
+
+// 1問ずつ出し方が変わる出し方（カードに出し方の目印を出す）
+export const MIXED_FORMATS = ['auto', 'stage'];
 
 export const CHOICE_COUNT = 4;
 
@@ -131,13 +136,23 @@ export function hintOf(answer) {
 }
 
 // ---------------------------------------------------------
-// おまかせ
+// おまかせ・ステップアップ
 // ---------------------------------------------------------
 
+// ステップアップ：単語の段階（覚え具合）で出し方を決める
+//   段階 0 … 4択（4択を作れない単語は めくる）→ STAGE_FROM.flip 以上 … めくる → STAGE_FROM.type 以上 … 入力
+export function stageFormat(level, hasChoices) {
+  if (level >= STAGE_FROM.type) return 'type';
+  if (level >= STAGE_FROM.flip || !hasChoices) return 'flip';
+  return 'choice';
+}
+
 // 1問ごとの出し方を決める
-//   format   : 学習を始めるときに選んだ出し方（flip / choice / type / auto）
+//   format     : 学習を始めるときに選んだ出し方（flip / choice / type / auto / stage）
 //   hasChoices : この問題で4択を作れるか
-export function pickFormat(format, hasChoices, random = Math.random) {
+//   level      : この問題の段階（ステップアップで使う。新しい単語は 0）
+export function pickFormat(format, hasChoices, random = Math.random, level = 0) {
+  if (format === 'stage') return stageFormat(level ?? 0, hasChoices);
   if (format === 'auto') {
     const list = hasChoices ? ['flip', 'choice', 'type'] : ['flip', 'type'];
     return list[Math.floor(random() * list.length)];
