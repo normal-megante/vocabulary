@@ -5,7 +5,7 @@
 // =========================================================
 
 // アプリのバージョン（設定画面に表示）
-export const APP_VERSION = '0.5.0（ステップ5）';
+export const APP_VERSION = '0.6.0（ステップ6）';
 
 // 「1日に解く問題数の目標」の呼び名（画面に出る言葉）
 export const GOAL_LABEL = 'ノルマ';
@@ -15,6 +15,7 @@ export const DECK_DEFAULTS = {
   dailyGoal: 20,       // 1日のノルマ（問題数）
   newPerDay: 10,       // 1日に出す新しい単語の数
   directions: 'both',  // 出題の向き：'both'=両方, 'forward'=表→裏だけ, 'backward'=裏→表だけ
+  studyFormat: 'flip', // 前回えらんだ出し方：'flip'=めくる, 'choice'=4択, 'type'=入力, 'auto'=おまかせ
 };
 
 // アプリ全体の初期設定

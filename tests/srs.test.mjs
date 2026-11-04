@@ -121,3 +121,49 @@ test('ホーム用の数：復習の数と新しく出せる数', () => {
   assert.deepEqual(counts, { due: 1, fresh: 2 });
   assert.equal(progressId('x', 'f'), 'x:f');
 });
+
+test('4択の正解は半分の重さ：1回目は段階そのまま、2回目で段階 +1', () => {
+  const c = card('a');
+  // 新しい単語を4択で正解 → 段階0のまま「半分」たまる・明日もう一度
+  const first = schedule(newProgress(c, 'f'), 'choice', TODAY);
+  assert.equal(first.level, 0);
+  assert.equal(first.halfStep, true);
+  assert.equal(first.due, addDays(TODAY, 1));
+  // 次の日にまた4択で正解 → 段階1
+  const day2 = addDays(TODAY, 1);
+  const second = schedule(first, 'choice', day2);
+  assert.equal(second.level, 1);
+  assert.equal(second.halfStep, false);
+  assert.equal(second.due, addDays(day2, 1));
+  // 段階3（7日）で4択の正解1回目 → 段階3のまま、また7日後
+  const p = studied(c, 'f', { level: 3, due: TODAY });
+  const half = schedule(p, 'choice', TODAY);
+  assert.equal(half.level, 3);
+  assert.equal(half.due, addDays(TODAY, 7));
+  assert.equal(nextLabel(p, 'choice', TODAY), '7日後');
+});
+
+test('4択の「半分」は、ほかの答え方をすると消える', () => {
+  const c = card('a');
+  const p = studied(c, 'f', { level: 2, due: TODAY, halfStep: true });
+  // 覚えてた → ふつうに +1（半分は使わずに消える）
+  assert.equal(schedule(p, 'good', TODAY).level, 3);
+  assert.equal(schedule(p, 'good', TODAY).halfStep, false);
+  // 忘れてた → 段階0・半分も消える
+  assert.equal(schedule(p, 'again', TODAY).halfStep, false);
+  // 前倒しの4択の正解では何も変わらない
+  const early = studied(c, 'f', { level: 2, due: '2026-11-06', halfStep: true });
+  const after = schedule(early, 'choice', TODAY);
+  assert.equal(after.level, 2);
+  assert.equal(after.halfStep, true);
+  assert.equal(after.due, '2026-11-06');
+});
+
+test('前から保存されている記録（halfStep がない）でも4択の正解を数えられる', () => {
+  const c = card('a');
+  const old = studied(c, 'f', { level: 1, due: TODAY });
+  delete old.halfStep;
+  const p = schedule(old, 'choice', TODAY);
+  assert.equal(p.level, 1);
+  assert.equal(p.halfStep, true);
+});

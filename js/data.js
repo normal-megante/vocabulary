@@ -147,7 +147,7 @@ export async function listProgressForCard(cardId) {
 //     good, hard, again（それぞれの答えの数） }
 // ※ いまは「今日の日付」で数えている。ステップ7で、猶予時間中は前日に数えるしくみを入れる。
 function emptyDaily(deckId, date) {
-  return { id: `${deckId}:${date}`, deckId, date, answered: 0, newCount: 0, good: 0, hard: 0, again: 0 };
+  return { id: `${deckId}:${date}`, deckId, date, answered: 0, newCount: 0, good: 0, hard: 0, again: 0, choice: 0 };
 }
 
 export async function getDaily(deckId, date) {
@@ -156,7 +156,7 @@ export async function getDaily(deckId, date) {
 
 // 1問答えたときの記録（覚え具合と、日ごとの記録を同時に保存する）
 //   progress    : srs.js の schedule() で計算した新しい覚え具合
-//   grade       : good / hard / again
+//   grade       : good / hard / again / choice（4択の正解）
 //   day         : 数える日（'2026-11-04' の形）
 //   countsAsNew : 「新しい単語」として数えるか
 export async function recordAnswer({ progress, grade, day, countsAsNew }) {

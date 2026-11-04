@@ -108,10 +108,12 @@ async function progressSection(card) {
     if (isNewProgress(p)) {
       return `<dt>${label}</dt><dd>まだ出ていません</dd>`;
     }
-    const dots = '●'.repeat(p.level) + '○'.repeat(MAX_LEVEL - p.level);
+    // ◐ は「4択の正解が半分たまっている」しるし
+    const half = p.halfStep && p.level < MAX_LEVEL;
+    const dots = '●'.repeat(p.level) + (half ? '◐' : '') + '○'.repeat(MAX_LEVEL - p.level - (half ? 1 : 0));
     return `
       <dt>${label}</dt>
-      <dd><span class="level-dots" title="段階 ${p.level}">${dots}</span><br>
+      <dd><span class="level-dots" title="段階 ${p.level}${half ? '（4択の正解が半分）' : ''}">${dots}</span><br>
         <span class="muted">次は ${formatDue(p.due)}・${p.reps}回答えた</span></dd>`;
   });
   return `

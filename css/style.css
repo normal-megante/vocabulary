@@ -622,6 +622,128 @@ a.deck-item:active { background: var(--surface-2); }
 }
 .grade-btn:active { box-shadow: none; }
 
+/* 出し方を選ぶ画面 */
+.format-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+.format-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.05s;
+}
+.format-btn:active:not(:disabled) { transform: translateY(2px); }
+.format-btn.last { border: 2px solid var(--primary); padding: 13px 15px; }
+.format-btn:disabled { opacity: 0.5; cursor: default; }
+.format-emoji { font-size: 28px; line-height: 1; }
+.format-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  line-height: 1.4;
+}
+.format-text b { font-size: 17px; }
+.format-text .muted { font-size: 13px; }
+
+/* 4択・入力のときの問題カード（めくるより小さめ） */
+.flashcard.quiz {
+  flex: 0 0 auto;
+  min-height: 170px;
+  cursor: default;
+  user-select: text;
+}
+
+/* 4択の選択肢 */
+.choice-list {
+  display: grid;
+  gap: 8px;
+}
+.choice-btn {
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 14px;
+  text-align: left;
+  line-height: 1.35;
+}
+.choice-num {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+}
+.choice-text {
+  font-size: 17px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.choice-btn:disabled { opacity: 0.5; }
+.choice-btn.right,
+.choice-btn.wrong { opacity: 1; }
+.choice-btn.right { border: 2px solid var(--success); background: rgba(34, 160, 107, 0.12); }
+.choice-btn.wrong { border: 2px solid var(--danger); background: rgba(229, 72, 77, 0.12); }
+.choice-btn.right .choice-num { background: var(--success); color: #fff; }
+.choice-btn.wrong .choice-num { background: var(--danger); color: #fff; }
+
+/* 入力 */
+.type-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.type-form input.type-input {
+  min-height: 54px;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: center;
+}
+.type-form input.type-input.right { border: 2px solid var(--success); color: var(--success); }
+.type-form input.type-input.wrong { border: 2px solid var(--danger); color: var(--danger); text-decoration: line-through; }
+.type-buttons {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+}
+.type-buttons[hidden] { display: none; }
+
+/* 4択・入力で答えたあと */
+.feedback {
+  margin-bottom: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 15px;
+}
+.feedback p { margin: 2px 0 0; }
+.feedback .feedback-title { margin: 0; font-size: 19px; font-weight: 800; }
+.feedback.right { border-color: var(--success); }
+.feedback.wrong { border-color: var(--danger); }
+.feedback.right .feedback-title { color: var(--success); }
+.feedback.wrong .feedback-title { color: var(--danger); }
+.next-row {
+  display: flex;
+  gap: 8px;
+}
+.next-row > .btn { flex: 1; }
+.next-row > #override-btn { padding: 0 10px; font-size: 14px; white-space: nowrap; }
+
 /* 結果画面 */
 .result-grid {
   display: grid;
@@ -629,6 +751,7 @@ a.deck-item:active { background: var(--surface-2); }
   gap: 8px;
   margin: 16px 0;
 }
+.result-grid.two { grid-template-columns: repeat(2, 1fr); }
 .result-cell {
   padding: 8px 4px;
   border-radius: 12px;

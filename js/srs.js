@@ -8,7 +8,9 @@
 //   lapses       : 覚えていたのに忘れた回数
 //   firstStudied : 初めて答えた日
 //   lastStudied  : 最後に答えた日
-//   lastResult   : 最後の答え（good / hard / again）
+//   lastResult   : 最後の答え（good / hard / again / choice）
+//   halfStep     : 4択の正解が「半分」たまっている（true のとき、次の4択の正解で段階 +1）
+//   lastFormat   : 最後に答えた出し方（flip / choice / type。学習画面が記録する）
 //
 // 画面やデータ保存とは関係のない「計算だけ」のファイル。
 // tests/srs.test.mjs で動きを確かめられる。
@@ -44,6 +46,7 @@ export function newProgress(card, dir) {
     firstStudied: null,
     lastStudied: null,
     lastResult: null,
+    halfStep: false,
   };
 }
 
@@ -67,29 +70,45 @@ export function daysBetween(fromKey, toKey) {
 
 // ---------------------------------------------------------
 // 答えた結果から、次の覚え具合を計算する
-//   grade = 'good'  : 覚えてた（4択・入力なら正解）→ 段階 +1
-//           'hard'  : あやしい                    → 段階 −1（最低1）
-//           'again' : 忘れてた（4択・入力なら不正解）→ 段階0、今日もう一度
-// ※ 予定の日より前に解いた（前倒し）ときに「覚えてた」なら、記録は変えない。
+//   grade = 'good'   : 覚えてた・入力で正解 → 段階 +1
+//           'choice' : 4択で正解 → ふつうの正解の半分の重さ（勘でも当たるので）
+//                      1回目は段階そのまま（同じ間隔でもう一度出す）、2回たまると段階 +1
+//           'hard'   : あやしい → 段階 −1（最低1）
+//           'again'  : 忘れてた・不正解 → 段階0、今日もう一度
+// ※ 予定の日より前に解いた（前倒し）ときに正解なら、記録は変えない。
 //    （1日に何度も解いて、段階が一気に上がりすぎないように）
 // ---------------------------------------------------------
 export function schedule(progress, grade, today) {
   const wasNew = isNew(progress);
   const early = !wasNew && progress.due > today;
   let { level, due, lapses } = progress;
+  let halfStep = progress.halfStep ?? false;
 
   if (grade === 'good') {
     if (!early) {
       level = Math.min(MAX_LEVEL, level + 1);
       due = addDays(today, INTERVALS[level]);
+      halfStep = false;
+    }
+  } else if (grade === 'choice') {
+    if (!early) {
+      if (halfStep) {
+        level = Math.min(MAX_LEVEL, level + 1);
+        halfStep = false;
+      } else {
+        halfStep = true;
+      }
+      due = addDays(today, Math.max(1, INTERVALS[level]));
     }
   } else if (grade === 'hard') {
     level = Math.max(1, level - 1);
     due = addDays(today, INTERVALS[level]);
+    halfStep = false;
   } else {
     if (level > 0) lapses += 1;
     level = 0;
     due = today;
+    halfStep = false;
   }
 
   return {
@@ -97,6 +116,7 @@ export function schedule(progress, grade, today) {
     level,
     due,
     lapses,
+    halfStep,
     reps: progress.reps + 1,
     firstStudied: progress.firstStudied ?? today,
     lastStudied: today,
