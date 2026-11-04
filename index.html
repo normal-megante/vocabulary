@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <!-- スマホの一番上（時計などの帯）の色。画面の背景と同じ色にそろえる -->
+  <meta name="theme-color" content="#f3f5fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#12141b" media="(prefers-color-scheme: dark)">
+  <meta name="description" content="毎日つづけやすい、ゲーム感覚の単語帳アプリ">
+  <title>単語帳</title>
+  <!-- ホーム画面に追加するための情報（名前・アイコンなど） -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="stylesheet" href="css/style.css">
+  <!-- アプリの動きは js/main.js から始まります -->
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+  <!-- 上の帯：画面のタイトルと戻るボタン -->
+  <header class="app-header">
+    <div class="bar">
+      <button id="back-btn" class="icon-btn" type="button" aria-label="戻る" hidden>‹</button>
+      <h1 id="page-title">単語帳</h1>
+    </div>
+  </header>
+
+  <!-- 各画面の中身は、ここに入れ替わりで表示されます -->
+  <main id="view" class="container">
+    <noscript>このアプリを使うには JavaScript を有効にしてください。</noscript>
+  </main>
+
+  <!-- 下のタブ：画面の切り替え -->
+  <nav class="tabbar" aria-label="メインメニュー">
+    <div class="bar">
+      <a href="#/home" data-tab="home"><span class="tab-icon" aria-hidden="true">🏠</span><span>ホーム</span></a>
+      <a href="#/decks" data-tab="decks"><span class="tab-icon" aria-hidden="true">📚</span><span>単語帳</span></a>
+      <a href="#/stamps" data-tab="stamps"><span class="tab-icon" aria-hidden="true">🏅</span><span>スタンプ</span></a>
+      <a href="#/settings" data-tab="settings"><span class="tab-icon" aria-hidden="true">⚙️</span><span>設定</span></a>
+    </div>
+  </nav>
+</body>
+</html>

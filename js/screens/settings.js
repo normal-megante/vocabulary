@@ -1,0 +1,138 @@
+// =========================================================
+// 設定画面：バックアップ・学習の設定・データについて
+// =========================================================
+import { getSettings, saveSettings, listDecksWithCounts, exportAllData, replaceAllData } from '../data.js';
+import { makeBackup, parseBackup, backupFileName } from '../backup.js';
+import { APP_VERSION, GOAL_LABEL } from '../defaults.js';
+import { formatDateTimeJa } from '../util.js';
+import { confirmDialog, alertDialog, showToast, downloadFile } from '../ui.js';
+import { replaceLocation } from '../nav.js';
+import { installState, promptInstall, onInstallChange } from '../install.js';
+
+export const title = '設定';
+
+// 「ホーム画面に追加」の欄（アプリとして開いているときは出さない）
+function installSection(state) {
+  if (state === 'app') return '';
+  let body;
+  if (state === 'installed') {
+    body = '<p>追加しました！ これからは、ホーム画面の「単語帳」アイコンから開いてください。</p>';
+  } else if (state === 'ready') {
+    body = `
+      <p class="muted">ホーム画面に追加すると、ふつうのアプリのように開けます。一度開いたあとは、ネットにつながっていなくても使えます。</p>
+      <button class="btn primary block" type="button" id="install-btn" style="margin-top:12px">ホーム画面に追加する</button>`;
+  } else {
+    body = `
+      <p class="muted">ホーム画面に追加すると、ふつうのアプリのように開けます。一度開いたあとは、ネットにつながっていなくても使えます。</p>
+      <p style="margin-top:8px">Chrome の右上の「︙」メニューから「ホーム画面に追加」（または「アプリをインストール」）を選んでください。</p>`;
+  }
+  return `<section class="card"><h3>📱 ホーム画面に追加</h3>${body}</section>`;
+}
+
+export async function render(el, { refresh, signal }) {
+  const install = installState();
+  const settings = await getSettings();
+  const decks = await listDecksWithCounts();
+  const totalCards = decks.reduce((sum, deck) => sum + deck.cardCount, 0);
+
+  // 「データを勝手に消さないで」のお願いが通っているか
+  const persisted = await navigator.storage?.persisted?.().catch(() => false);
+  // 使っている容量
+  const estimate = await navigator.storage?.estimate?.().catch(() => null);
+  const usedKB = estimate ? Math.ceil(estimate.usage / 1024) : null;
+
+  el.innerHTML = `
+    ${installSection(install)}
+
+    <section class="card">
+      <h3>💾 バックアップ</h3>
+      <p class="muted">データはこのスマホの中だけに保存されています。故障・機種変更・アプリの削除に備えて、ときどきファイルに保存しておきましょう。</p>
+      <dl class="info-list" style="margin:12px 0">
+        <dt>最後のバックアップ</dt>
+        <dd>${settings.lastBackupAt ? formatDateTimeJa(new Date(settings.lastBackupAt)) : 'まだありません'}</dd>
+      </dl>
+      <div class="stack" style="margin-top:0">
+        <button class="btn primary block" type="button" id="export-btn">バックアップを保存</button>
+        <button class="btn block" type="button" id="import-btn">バックアップから戻す</button>
+        <input type="file" id="import-file" hidden>
+      </div>
+      <p class="muted" style="margin-top:12px">保存したファイルは、スマホの「ダウンロード」フォルダに入ります。Google ドライブなどにも入れておくと、さらに安心です。</p>
+    </section>
+
+    <section class="card">
+      <h3>学習の設定</h3>
+      <dl class="info-list">
+        <dt>猶予時刻</dt><dd>午前${settings.graceHour}時まで</dd>
+      </dl>
+      <p class="muted" style="margin-top:8px">※ 変更できるようになるのはステップ7です。<br>
+      ${GOAL_LABEL}と新しい単語の数は、単語帳ごとに設定します。</p>
+    </section>
+
+    <section class="card">
+      <h3>データについて</h3>
+      <dl class="info-list">
+        <dt>入っているもの</dt><dd>単語帳 ${decks.length}冊・単語 ${totalCards}語</dd>
+        <dt>保存場所</dt><dd>この端末のブラウザの中</dd>
+        <dt>開き方</dt><dd>${install === 'app' ? 'アプリ（ホーム画面から）' : 'ブラウザ'}</dd>
+        <dt>消えにくい設定</dt><dd>${persisted ? '有効' : '未設定'}</dd>
+        <dt>使用量</dt><dd>${usedKB === null ? '不明' : `約 ${usedKB.toLocaleString()} KB`}</dd>
+        <dt>バージョン</dt><dd>${APP_VERSION}</dd>
+      </dl>
+    </section>`;
+
+  // ---- ホーム画面に追加 ----
+  el.querySelector('#install-btn')?.addEventListener('click', async () => {
+    const accepted = await promptInstall();
+    if (accepted) showToast('ホーム画面に追加しています…');
+  });
+  // 追加できるようになった・追加された、などのときは表示を更新
+  onInstallChange(() => refresh(), signal);
+
+  // ---- バックアップを保存 ----
+  el.querySelector('#export-btn').addEventListener('click', async () => {
+    const now = new Date();
+    const data = await exportAllData();
+    const backup = makeBackup(data, { appVersion: APP_VERSION, exportedAt: now.toISOString() });
+    downloadFile(backupFileName(now), JSON.stringify(backup));
+    await saveSettings({ lastBackupAt: backup.exportedAt });
+    showToast('バックアップを保存しました');
+    refresh();
+  });
+
+  // ---- バックアップから戻す ----
+  const fileInput = el.querySelector('#import-file');
+  el.querySelector('#import-btn').addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    fileInput.value = ''; // 同じファイルをもう一度選んでも反応するように
+    if (!file) return;
+
+    const result = parseBackup(await file.text());
+    if (!result.ok) {
+      await alertDialog(result.error);
+      return;
+    }
+
+    const { summary } = result;
+    const when = summary.exportedAt ? formatDateTimeJa(new Date(summary.exportedAt)) : '日時不明';
+    const ok = await confirmDialog(
+      `このバックアップ（${when}）には、単語帳 ${summary.decks}冊・単語 ${summary.cards}語 が入っています。\n\n`
+      + `今のデータ（単語帳 ${decks.length}冊・単語 ${totalCards}語）はすべて消えて、バックアップの内容に置き換わります。読み込みますか？`,
+      { okLabel: '置き換える', danger: true },
+    );
+    if (!ok) return;
+
+    try {
+      await replaceAllData(result.backup.data);
+    } catch (error) {
+      console.error(error);
+      await alertDialog(`読み込みに失敗しました。今のデータはそのままです。\n（${error.message}）`);
+      return;
+    }
+    // 今のデータは、このバックアップを取った時点と同じになったので、その日時を記録する
+    await saveSettings({ lastBackupAt: summary.exportedAt });
+    showToast('バックアップから戻しました');
+    replaceLocation('#/home');
+  });
+}

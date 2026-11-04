@@ -1,0 +1,751 @@
+/* =========================================================
+   見た目の設定
+   いちばん上の「色やサイズ」を変えると、アプリ全体の雰囲気が変わります。
+   ========================================================= */
+
+/* ----- 色やサイズ（明るいテーマ） ----- */
+:root {
+  --bg: #f3f5fb;          /* 背景 */
+  --surface: #ffffff;     /* カードの色 */
+  --surface-2: #eef1f8;   /* 入力欄などの色 */
+  --text: #1d2233;        /* 文字 */
+  --muted: #6b7385;       /* 薄い文字 */
+  --border: #e1e5ee;      /* 枠線 */
+  --primary: #4f6df5;     /* メインの色（ボタンなど） */
+  --primary-strong: #3550d0;
+  --on-primary: #ffffff;  /* メインの色の上の文字 */
+  --accent: #ffb020;      /* アクセント（スタンプなど） */
+  --success: #22a06b;     /* 正解・成功 */
+  --danger: #e5484d;      /* 削除・注意 */
+  --radius: 16px;         /* 角の丸み */
+  --shadow: 0 2px 8px rgba(29, 34, 51, 0.06);
+  --header-h: 56px;
+  --tabbar-h: 64px;
+  --max-width: 560px;     /* PC で見たときの最大の横幅 */
+}
+
+/* ----- 暗いテーマ（スマホがダークモードのとき） ----- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12141b;
+    --surface: #1c1f2a;
+    --surface-2: #252937;
+    --text: #eef0f6;
+    --muted: #9aa1b4;
+    --border: #2e3343;
+    --primary: #7088ff;
+    --primary-strong: #4a5fd6;
+    --on-primary: #0d1020;
+    --shadow: none;
+  }
+}
+
+/* ----- 全体 ----- */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h2, h3 { margin: 0 0 8px; line-height: 1.3; }
+h2 { font-size: 20px; }
+h3 { font-size: 17px; }
+p { margin: 0; }
+
+.bar {
+  max-width: var(--max-width);
+  margin: 0 auto;
+}
+
+/* ----- 上の帯 ----- */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  padding-top: env(safe-area-inset-top);
+}
+.app-header .bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: var(--header-h);
+  padding: 0 16px;
+}
+.app-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.icon-btn {
+  width: 40px;
+  height: 40px;
+  margin-left: -10px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-btn:active { background: var(--surface-2); }
+
+/* ----- 画面の中身 ----- */
+.container {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 8px 16px calc(var(--tabbar-h) + 32px + env(safe-area-inset-bottom));
+}
+body.no-tabbar .container {
+  padding-bottom: calc(32px + env(safe-area-inset-bottom));
+}
+
+/* 画面の中の部品を縦に並べ、すき間をあける */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ----- 下のタブ ----- */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+body.no-tabbar .tabbar { display: none; }
+
+.tabbar .bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  height: var(--tabbar-h);
+}
+.tabbar a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.tab-icon {
+  font-size: 22px;
+  line-height: 1;
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+.tabbar a.active { color: var(--primary); }
+.tabbar a.active .tab-icon { filter: none; opacity: 1; }
+
+/* ----- カード（白い四角） ----- */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+}
+.card.placeholder {
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+}
+.card.error {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+/* ----- ボタン ----- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.05s;
+}
+.btn:active { transform: translateY(2px); }
+
+.btn.primary {
+  background: var(--primary);
+  border-color: transparent;
+  color: var(--on-primary);
+  box-shadow: 0 3px 0 var(--primary-strong);
+}
+.btn.primary:active { box-shadow: 0 1px 0 var(--primary-strong); }
+
+.btn.danger { color: var(--danger); }
+.btn.danger.filled {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+}
+.btn.block { display: flex; width: 100%; }
+.btn.small { min-height: 38px; padding: 0 14px; font-size: 15px; }
+
+/* ----- 入力欄 ----- */
+.field-label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+input[type="text"],
+input[type="search"],
+textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+input[type="text"]:focus,
+input[type="search"]:focus,
+textarea:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+textarea {
+  display: block;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* 一括登録の貼り付け欄：1行が折り返さないようにして、行の区切りを見やすく */
+.paste-area {
+  min-height: 180px;
+  white-space: pre;
+  overflow-x: auto;
+  tab-size: 4;
+  font-size: 15px;
+}
+
+/* 入力欄の「必須」「空でもOK」の札 */
+.tag-required,
+.tag-optional {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+.tag-required { background: var(--danger); color: #fff; }
+.tag-optional { background: var(--surface-2); color: var(--muted); }
+
+/* 入力欄を縦に並べたフォーム */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ラジオボタン（どれか1つを選ぶ） */
+.radio-list {
+  display: flex;
+  flex-direction: column;
+}
+.radio-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.radio-list input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--primary);
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+.row > input { flex: 1; min-width: 0; }
+
+/* ----- 文字の飾り ----- */
+.muted { color: var(--muted); font-size: 14px; }
+.section-title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+}
+.empty {
+  padding: 24px 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ----- 単語帳の一覧 ----- */
+.deck-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.deck-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+a.deck-item {
+  color: inherit;
+  text-decoration: none;
+}
+a.deck-item:active { background: var(--surface-2); }
+.deck-info {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.deck-name {
+  overflow: hidden;
+  font-weight: 800;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.chevron {
+  color: var(--muted);
+  font-size: 26px;
+  line-height: 1;
+}
+
+/* ----- 単語の一覧 ----- */
+.section-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.section-head .section-title { margin: 0; }
+
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.search-row input { flex: 1; min-width: 0; }
+
+.word-list {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.word-list li + li { border-top: 1px solid var(--border); }
+.word-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 16px;
+  color: inherit;
+  text-decoration: none;
+}
+.word-item:active { background: var(--surface-2); }
+.word-front {
+  font-weight: 800;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.word-back {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 14px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ----- 一括登録 ----- */
+.sample-table {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.sample-table th,
+.sample-table td {
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.sample-table th {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.summary {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.text-danger { color: var(--danger); }
+
+.preview-list {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.preview-list li {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+.preview-extra {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.error-list {
+  margin: 4px 0 0;
+  padding-left: 1.2em;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+/* ----- 進み具合のバー ----- */
+.progress {
+  flex: 1;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.progress-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--primary);
+  transition: width 0.3s;
+}
+.progress-bar.done { background: var(--success); }
+
+/* ホームの単語帳ごとの「今日」 */
+.today-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.goal-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.goal-text {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.goal-text.done { color: var(--success); }
+
+/* ----- 学習画面 ----- */
+.study {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: calc(100dvh - var(--header-h) - env(safe-area-inset-top) - 48px - env(safe-area-inset-bottom));
+}
+.study-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.study-count {
+  min-width: 4.5em;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.flashcard {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 300px;
+  padding: 24px 20px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+}
+.card-tags {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+.tag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.tag.new { background: var(--accent); color: #3a2600; }
+.tag.again { background: var(--danger); color: #fff; }
+
+.card-question {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.card-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  padding-top: 14px;
+  border-top: 2px dashed var(--border);
+}
+.card-answer[hidden] { display: none; }
+.card-answer-text {
+  color: var(--primary);
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.3;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.card-question.long,
+.card-answer-text.long { font-size: 22px; }
+.card-question.very-long,
+.card-answer-text.very-long { font-size: 17px; font-weight: 700; text-align: left; }
+.card-example {
+  font-size: 15px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.card-note {
+  color: var(--muted);
+  font-size: 14px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.tap-hint { color: var(--muted); font-size: 13px; }
+
+/* 画面の下に固定するボタン置き場（親指で押しやすいように） */
+.study-actions {
+  position: sticky;
+  bottom: 0;
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+.btn.big { min-height: 58px; font-size: 18px; }
+
+.grade-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.grade-buttons[hidden] { display: none; }
+.grade-btn {
+  flex-direction: column;
+  gap: 0;
+  min-height: 74px;
+  padding: 6px 4px;
+  border-color: transparent;
+  line-height: 1.3;
+}
+.grade-emoji { font-size: 22px; }
+.grade-label { font-size: 15px; }
+.grade-next { font-size: 11px; font-weight: 600; opacity: 0.8; }
+
+/* 採点ボタンの色（忘れてた＝赤、あやしい＝オレンジ、覚えてた＝緑） */
+.grade-btn.again { background: #fdecec; color: #c62f34; box-shadow: 0 3px 0 #f0b3b5; }
+.grade-btn.hard  { background: #fff3d9; color: #9a5b00; box-shadow: 0 3px 0 #f2d08a; }
+.grade-btn.good  { background: #e1f5ea; color: #157a4e; box-shadow: 0 3px 0 #9fdbbd; }
+@media (prefers-color-scheme: dark) {
+  .grade-btn.again { background: rgba(229, 72, 77, 0.18); color: #ff9a9d; box-shadow: 0 3px 0 rgba(229, 72, 77, 0.35); }
+  .grade-btn.hard  { background: rgba(255, 176, 32, 0.16); color: #ffc65c; box-shadow: 0 3px 0 rgba(255, 176, 32, 0.32); }
+  .grade-btn.good  { background: rgba(34, 160, 107, 0.18); color: #5fd6a0; box-shadow: 0 3px 0 rgba(34, 160, 107, 0.35); }
+}
+.grade-btn:active { box-shadow: none; }
+
+/* 結果画面 */
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 16px 0;
+}
+.result-cell {
+  padding: 8px 4px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  font-size: 13px;
+  font-weight: 700;
+}
+.result-cell b {
+  display: block;
+  font-size: 24px;
+}
+.result-cell.good b { color: var(--success); }
+.result-cell.hard b { color: var(--accent); }
+.result-cell.again b { color: var(--danger); }
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* 単語の編集画面の「覚え具合」 */
+.level-dots {
+  color: var(--primary);
+  letter-spacing: 2px;
+}
+
+/* ----- お知らせカード（バックアップのお願いなど） ----- */
+.notice-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-color: var(--accent);
+  color: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+.notice-card .muted {
+  display: block;
+  font-weight: 400;
+}
+.notice-icon { font-size: 26px; }
+
+/* ----- ホームのはじめての案内 ----- */
+.hero {
+  padding: 32px 20px;
+  text-align: center;
+}
+.hero-emoji {
+  margin-bottom: 8px;
+  font-size: 56px;
+  line-height: 1;
+}
+.hero p { margin-bottom: 16px; }
+
+.today {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+/* ----- 情報の表（設定画面など） ----- */
+.info-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px 16px;
+  margin: 0;
+}
+.info-list dt { color: var(--muted); font-size: 14px; }
+.info-list dd { margin: 0; font-weight: 700; text-align: right; }
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ----- 確認ダイアログ ----- */
+.dialog {
+  width: min(92vw, 400px);
+  padding: 20px;
+  border: none;
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text);
+}
+.dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.dialog-message {
+  display: block;
+  margin-bottom: 12px;
+  white-space: pre-wrap;
+}
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ----- 下からふわっと出るお知らせ ----- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tabbar-h) + 16px + env(safe-area-inset-bottom));
+  z-index: 100;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--text);
+  color: var(--bg);
+  font-weight: 700;
+  opacity: 0;
+  transform: translate(-50%, 16px);
+  transition: opacity 0.25s, transform 0.25s;
+  pointer-events: none;
+}
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
