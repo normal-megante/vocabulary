@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeBackup, parseBackup, backupFileName, BACKUP_FORMAT } from '../js/backup.js';
+import { COIN_REWARDS } from '../js/defaults.js';
 
 const sampleData = {
   decks: [{ id: 'd1', name: '英単語', createdAt: 1 }],
@@ -87,7 +88,7 @@ test('スタンプが入っていない古いバックアップは、学習記�
   assert.deepEqual(result.backup.data.daily.map((d) => d.achieved), [true, false]);
   assert.deepEqual(result.backup.data.stamps, [{ date: '2026-11-03', decks: ['d1'], gold: false }]);
   // 通帳もないので、スタンプの分のコインを記録する
-  assert.deepEqual(result.backup.data.wallet.map((e) => [e.id, e.coins]), [['goal:d1:2026-11-03', 3]]);
+  assert.deepEqual(result.backup.data.wallet.map((e) => [e.id, e.coins]), [['goal:d1:2026-11-03', COIN_REWARDS.goal]]);
 });
 
 test('通帳が入っていないステップ7のバックアップは、スタンプの分のコインを記録する（金色のボーナスも）', () => {

@@ -2,8 +2,9 @@
 // ホーム画面：今日の学習の入り口と、スタンプの連続記録
 // =========================================================
 import {
-  listDecks, getDeckToday, getSettings, listOverallStamps, getWallet, useRestTickets,
+  listDecks, getDeckToday, getSettings, listOverallStamps, getWallet, useRestTickets, claimBingos,
 } from '../data.js';
+import { bingoMessage } from '../bingo.js';
 import { escapeHtml, formatDateJa, toDateKey } from '../util.js';
 import { streakOf, inGrace, isAchieved } from '../stamps.js';
 import { BACKUP_REMINDER_DAYS, GOAL_LABEL, ITEMS } from '../defaults.js';
@@ -33,6 +34,9 @@ export async function render(el) {
   if (restUsed.length > 0) {
     showToast(`💤 お休みチケットを${restUsed.length}枚使って、連続日数をつなぎました`);
   }
+  // そろっていたビンゴのコインを受け取る
+  const bingos = await claimBingos();
+  if (bingos.length > 0) showToast(bingoMessage(bingos));
 
   const [todays, stamps, wallet] = await Promise.all([
     Promise.all(decks.map((deck) => getDeckToday(deck, settings.graceHour))),

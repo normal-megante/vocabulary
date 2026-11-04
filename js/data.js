@@ -13,6 +13,7 @@ import { studyDay, inGrace, isAchieved, addAnswer, recheckGoal, makeOverallStamp
 import {
   goalEntry, goldEntry, buyEntry, restEntry, walletOf, canBuy, planRestDays,
 } from './wallet.js';
+import { findBingos, bingoEntry, filledDates } from './bingo.js';
 
 // ---------------- 単語帳 ----------------
 
@@ -175,7 +176,8 @@ export async function getStudyDay(deck, graceHour, now = new Date()) {
 //   day         : 数える日（'2026-11-04' の形）
 //   countsAsNew : 「新しい単語」として数えるか
 //   goal        : この単語帳のきょうのぶんの問題数
-//   → { daily, achievedNow（この1問できょうのぶん達成）, goldNow（全体のスタンプが金色になった）, coins（もらったコイン） }
+//   → { daily, achievedNow（この1問できょうのぶん達成）, goldNow（全体のスタンプが金色になった）,
+//       coins（達成・金色でもらったコイン）, bingos（この達成でそろったビンゴ） }
 export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) {
   const db = await openDB();
   const tx = db.transaction(['progress', 'daily', 'wallet'], 'readwrite');
@@ -192,10 +194,18 @@ export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) 
   await transactionDone(tx);
 
   let goldNow = false;
+  let bingos = [];
   if (result.achievedNow) {
     ({ goldNow } = await refreshOverallStamp(day));
+    bingos = await claimBingos();
   }
-  return { daily: result.daily, achievedNow: result.achievedNow, goldNow, coins: coinsFor(result.achievedNow, goldNow) };
+  return {
+    daily: result.daily,
+    achievedNow: result.achievedNow,
+    goldNow,
+    coins: coinsFor(result.achievedNow, goldNow),
+    bingos,
+  };
 }
 
 // 達成したとき・金色になったときに、もらえるコインの数
@@ -250,7 +260,7 @@ export async function refreshOverallStamp(date) {
 
 // 単語帳の問題数を変えたとき：その単語帳の「数える日」の記録を見直す
 // （下げてもう届いていれば達成にする＝コインも。全体のスタンプも見直す）
-//   → { achievedNow, goldNow, coins }
+//   → { achievedNow, goldNow, coins, bingos }
 export async function recheckDeckToday(deck, graceHour) {
   const { day } = await getStudyDay(deck, graceHour);
   const saved = await getOne('daily', `${deck.id}:${day}`);
@@ -267,7 +277,8 @@ export async function recheckDeckToday(deck, graceHour) {
     }
   }
   const { goldNow } = await refreshOverallStamp(day);
-  return { achievedNow, goldNow, coins: coinsFor(achievedNow, goldNow) };
+  const bingos = achievedNow ? await claimBingos() : [];
+  return { achievedNow, goldNow, coins: coinsFor(achievedNow, goldNow), bingos };
 }
 
 // 全体のスタンプを全部
@@ -324,6 +335,26 @@ export async function useRestTickets(graceHour, now = new Date()) {
   };
   await transactionDone(tx);
   return used;
+}
+
+// スタンプカードでそろったビンゴのコインを受け取る（まだもらっていないものだけ）
+// （達成したとき・ホームやスタンプ画面を開いたときに呼ぶ。お休みの日でそろったものもここで）
+//   → 新しくもらったビンゴの一覧（bingo.js の findBingos の形）
+export async function claimBingos() {
+  const db = await openDB();
+  const tx = db.transaction(['stamps', 'wallet'], 'readwrite');
+  const walletStore = tx.objectStore('wallet');
+  const stampKeys = tx.objectStore('stamps').getAllKeys();
+  let found = [];
+  walletStore.getAll().onsuccess = (event) => {
+    const entries = event.target.result;
+    const already = new Set(entries.map((entry) => entry.id));
+    const filled = filledDates(stampKeys.result, walletOf(entries).restDates);
+    found = findBingos(filled).filter((bingo) => !already.has(bingo.id));
+    for (const bingo of found) walletStore.put(bingoEntry(bingo));
+  };
+  await transactionDone(tx);
+  return found;
 }
 
 // ---------------- バックアップ用：全データの読み出し・置き換え ----------------

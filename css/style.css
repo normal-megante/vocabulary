@@ -908,6 +908,23 @@ a.deck-item:active { background: var(--surface-2); }
 /* カレンダーのお休みの日 */
 .rest-mark { font-size: 18px; line-height: 1; }
 
+/* ビンゴ：そろった列の日・リーチの日・1か月パーフェクト */
+.cal-day.bingo { background: rgba(255, 176, 32, 0.3); }
+.cal-day.reach { outline: 2px dashed var(--accent); outline-offset: -3px; }
+.calendar.perfect {
+  padding: 4px;
+  border-radius: 14px;
+  box-shadow: 0 0 0 2px #f5c518, 0 0 14px rgba(245, 197, 24, 0.6);
+}
+.bingo-summary {
+  margin: 10px 0 0;
+  font-size: 14px;
+  text-align: center;
+}
+@media (prefers-color-scheme: dark) {
+  .cal-day.bingo { background: rgba(255, 176, 32, 0.24); }
+}
+
 /* 結果画面の「🪙 +3」 */
 .coin-get {
   padding: 4px 14px;

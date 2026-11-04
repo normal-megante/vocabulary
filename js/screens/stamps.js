@@ -1,15 +1,16 @@
 // =========================================================
 // スタンプカード画面：コインとアイテムの交換所と、全体と単語帳ごとの月のカレンダー
 //   全体     … どれか1冊でも「きょうのぶん」を達成した日に ★（全部達成した日は金色）
-//              お休みチケットを使った日は 💤
+//              お休みチケットを使った日は 💤。カレンダーはビンゴカードにもなる（bingo.js）
 //   単語帳ごと … その単語帳の「きょうのぶん」を達成した日に ★
 // =========================================================
 import {
-  listDecks, listOverallStamps, listAchievedDays, getSettings, getWallet, buyItem, useRestTickets,
+  listDecks, listOverallStamps, listAchievedDays, getSettings, getWallet, buyItem, useRestTickets, claimBingos,
 } from '../data.js';
 import { escapeHtml, toDateKey } from '../util.js';
 import { streakOf, inGrace, monthWeeks, GOLD_MIN_DECKS } from '../stamps.js';
 import { canBuy } from '../wallet.js';
+import { monthBingo, bingoMessage, filledDates } from '../bingo.js';
 import { GOAL_LABEL, COIN_REWARDS, ITEMS } from '../defaults.js';
 import { confirmDialog, alertDialog, showToast } from '../ui.js';
 
@@ -23,6 +24,9 @@ export async function render(el, { signal, refresh }) {
   // 連続が切れそうなら、先にお休みチケットを使っておく
   const restUsed = await useRestTickets(settings.graceHour);
   if (restUsed.length > 0) showToast(restMessage(restUsed));
+  // そろっていたビンゴのコインを受け取る
+  const bingos = await claimBingos();
+  if (bingos.length > 0) showToast(bingoMessage(bingos));
 
   const [decks, overall, wallet] = await Promise.all([listDecks(), listOverallStamps(), getWallet()]);
   const now = new Date();
@@ -59,6 +63,8 @@ export async function render(el, { signal, refresh }) {
     const restDates = view === 'all' ? wallet.restDates : new Set();
     const streak = streakOf(new Set([...dates, ...restDates]), today, { graceActive });
     const goldCount = [...map.values()].filter((s) => s.gold).length;
+    // ビンゴ（全体のカードだけ）
+    const bingo = view === 'all' ? monthBingo(year, month, filledDates(dates, restDates), today) : null;
 
     // いちばん古いスタンプの月より前には戻れない（今月より先にも進めない）
     const firstDate = [...dates].sort()[0] ?? today;
@@ -91,10 +97,11 @@ export async function render(el, { signal, refresh }) {
           <button class="btn small" type="button" id="next-month" ${canNext ? '' : 'disabled'} aria-label="次の月">›</button>
         </div>
 
-        <div class="calendar" role="grid" aria-label="${year}年${month}月のスタンプ">
+        <div class="calendar${bingo?.all ? ' perfect' : ''}" role="grid" aria-label="${year}年${month}月のスタンプ">
           ${WEEKDAYS.map((w, i) => `<div class="cal-head${i === 0 ? ' sun' : i === 6 ? ' sat' : ''}">${w}</div>`).join('')}
-          ${monthWeeks(year, month).flat().map((date) => dayCell(date, map, restDates, today, view)).join('')}
+          ${monthWeeks(year, month).flat().map((date) => dayCell(date, map, restDates, today, view, bingo)).join('')}
         </div>
+        ${bingo ? bingoSummary(month, bingo) : ''}
 
         ${graceActive ? `<p class="late-note" style="margin-top:12px">🌙 午前${settings.graceHour}時までは、昨日の「${GOAL_LABEL}」がまだなら昨日の分として数えます</p>` : ''}
         <p class="muted" style="margin-top:12px">${explain(view, deck)}</p>
@@ -173,7 +180,11 @@ function shopCard(wallet) {
     <section class="card shop-card">
       <div class="coin-row">
         <span class="coin-count" aria-label="コイン ${wallet.coins}枚">🪙 <b>${wallet.coins}</b><small>枚</small></span>
-        <span class="muted fine-print">「${GOAL_LABEL}」達成で 🪙${COIN_REWARDS.goal}<br>金色の日は さらに 🪙${COIN_REWARDS.goldBonus}</span>
+        <span class="muted fine-print">
+          「${GOAL_LABEL}」達成 🪙${COIN_REWARDS.goal}（1冊ごと）<br>
+          金色の日は さらに 🪙${COIN_REWARDS.goldBonus}<br>
+          ビンゴ1列 🪙${COIN_REWARDS.bingoLine}
+        </span>
       </div>
       <ul class="shop-list">${items}</ul>
     </section>`;
@@ -185,18 +196,30 @@ function restMessage(dates) {
   return `💤 お休みチケットを${dates.length}枚使って、${days} をお休みにしました（連続はつながっています）`;
 }
 
+// カレンダーの下の、今月のビンゴのようす
+function bingoSummary(month, bingo) {
+  let text = `🎯 ${month}月のビンゴ：<b>${bingo.lines}本</b>`;
+  if (bingo.reach > 0) text += `・リーチ <b>${bingo.reach}本</b>`;
+  if (bingo.all) text += '・<b>パーフェクト！</b>';
+  return `<p class="bingo-summary">${text}</p>`;
+}
+
 // カレンダーの1日分
-function dayCell(date, map, restDates, today, view) {
+//   bingo：全体のカードのときの、その月のビンゴのようす（monthBingo の結果）
+function dayCell(date, map, restDates, today, view, bingo) {
   if (!date) return '<div class="cal-day blank"></div>';
   const stamp = map.get(date);
   const rest = !stamp && restDates.has(date);
   const classes = ['cal-day'];
   if (date === today) classes.push('today');
   if (date > today) classes.push('future');
+  if (bingo?.bingoDates.has(date)) classes.push('bingo');
+  if (bingo?.reachDates.has(date)) classes.push('reach');
   const kind = stamp?.gold ? ' gold' : view === 'all' ? '' : ' deck';
   let mark = '';
   if (stamp) mark = stamp.gold ? '・金色のスタンプ' : '・スタンプ';
   else if (rest) mark = '・お休み';
+  if (bingo?.reachDates.has(date)) mark += '・この日でビンゴ';
   return `
     <div class="${classes.join(' ')}" role="gridcell" aria-label="${Number(date.slice(8))}日${mark}">
       <span class="cal-num">${Number(date.slice(8))}</span>
@@ -210,7 +233,10 @@ function explain(view, deck) {
   if (view === 'all') {
     return `どれか1冊でも「${GOAL_LABEL}」を達成した日にスタンプ。`
       + `単語帳が${GOLD_MIN_DECKS}冊以上あって、全部を達成した日は金色になります。`
-      + `💤 はお休みチケットを使った日です。`;
+      + `💤 はお休みチケットを使った日です。<br>`
+      + `<b>ビンゴ</b>：横1列（1週間）か縦1列（その月の毎週同じ曜日）がそろうと 🪙${COIN_REWARDS.bingoLine}、`
+      + `1か月ぜんぶそろうと さらに 🪙${COIN_REWARDS.bingoAll}。💤 もそろった扱いです。`
+      + `点線の日は、そこでスタンプを押すとビンゴになる日（リーチ）です。`;
   }
   if (deck.dailyGoal <= 0) {
     return `この単語帳は「${GOAL_LABEL}」が 0問 なので、スタンプは押されません（単語帳の画面で変えられます）。`;

@@ -13,6 +13,7 @@ import {
   getDeck, updateDeck, listCards, listProgress, getDaily, recordAnswer, getSettings, getStudyDay,
 } from '../data.js';
 import { isAchieved } from '../stamps.js';
+import { bingoMessage } from '../bingo.js';
 import { buildQueue, schedule, nextLabel, isNew } from '../srs.js';
 import {
   FORMATS, buildChoices, canUseChoice, checkTyped, compareKey, pickFormat, questionOf, answerOf,
@@ -456,10 +457,13 @@ export async function render(el, { params, setTitle, signal }) {
 
     // この1問できょうのぶんを達成したら、スタンプ！
     if (saved.achievedNow) {
-      session.stamp = { gold: saved.goldNow, coins: saved.coins };
+      const bingoCoins = saved.bingos.reduce((sum, bingo) => sum + bingo.coins, 0);
+      session.stamp = { gold: saved.goldNow, coins: saved.coins + bingoCoins, bingo: saved.bingos.length > 0 };
       showToast(saved.goldNow
         ? `👑 全部の単語帳を達成！ 金色のスタンプと 🪙${saved.coins} ゲット！`
         : `🎉 「${GOAL_LABEL}」達成！ スタンプと 🪙${saved.coins} ゲット！`);
+      // スタンプカードのビンゴがそろったら、もう1つお知らせ
+      if (saved.bingos.length > 0) showToast(bingoMessage(saved.bingos));
     }
 
     // まちがえたら、少しあとにもう一度出す
@@ -500,7 +504,7 @@ export async function render(el, { params, setTitle, signal }) {
         <span class="stamp big${stamp.gold ? ' gold' : ' deck'}" aria-hidden="true">★</span>
         <p><b>${stamp.gold ? '金色のスタンプ！' : 'スタンプゲット！'}</b><br>
           <span class="muted">${stamp.gold ? '全部の単語帳の「' + GOAL_LABEL + '」を達成しました' : `「${GOAL_LABEL}」を達成しました`}${session.late ? '（昨日の分）' : ''}</span></p>
-        ${stamp.coins > 0 ? `<a class="coin-get" href="#/stamps">🪙 +${stamp.coins}</a>` : ''}
+        ${stamp.coins > 0 ? `<a class="coin-get" href="#/stamps">${stamp.bingo ? '🎯 ビンゴ！ ' : ''}🪙 +${stamp.coins}</a>` : ''}
       </div>` : '';
 
     el.innerHTML = `

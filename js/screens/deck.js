@@ -8,6 +8,7 @@ import { escapeHtml, normalizeKey, toDateKey } from '../util.js';
 import { confirmDialog, promptDialog, showToast, alertDialog } from '../ui.js';
 import { replaceLocation } from '../nav.js';
 import { GOAL_LABEL } from '../defaults.js';
+import { bingoMessage } from '../bingo.js';
 
 export const title = '単語帳';
 
@@ -120,6 +121,7 @@ export async function render(el, { params, setTitle, refresh }) {
     showToast(recheck.achievedNow
       ? `設定を保存しました。「${GOAL_LABEL}」達成！ ${recheck.goldNow ? '金色の' : ''}スタンプと 🪙${recheck.coins} ゲット！`
       : '設定を保存しました');
+    if (recheck.bingos.length > 0) showToast(bingoMessage(recheck.bingos));
     refresh();
   });
 
