@@ -7,13 +7,16 @@
 //     format: 1,                ← ファイルの形のバージョン
 //     appVersion: '0.4.0…',     ← 書き出したときのアプリのバージョン
 //     exportedAt: '2026-11-04T12:34:56.000Z',  ← 書き出した日時
-//     data: { decks: [...], cards: [...], progress: [...], daily: [...], settings: [...] }
+//     data: { decks: [...], cards: [...], progress: [...], daily: [...], stamps: [...], settings: [...] }
 //   }
+//   ※ stamps（全体のスタンプ）はステップ7で追加。それより前のバックアップには無いので、
+//      読み込むときに学習記録から作り直す。
 //
 // 画面やデータ保存とは関係のない「計算だけ」のファイル。
 // tests/backup.test.mjs で動きを確かめられる。
 // =========================================================
 import { toDateKey } from './util.js';
+import { rebuildStamps } from './stamps.js';
 
 // ファイルの形を変えたときは、この数字を上げて parseBackup() に「古い形の直し方」を足す
 export const BACKUP_FORMAT = 1;
@@ -24,6 +27,7 @@ const STORES = {
   cards: { label: '単語', required: ['id', 'deckId', 'front', 'back'] },
   progress: { label: '覚え具合', required: ['id', 'cardId', 'deckId', 'dir'] },
   daily: { label: '学習記録', required: ['id', 'deckId', 'date'] },
+  stamps: { label: 'スタンプ', required: ['date'] },
   settings: { label: '設定', required: ['key'] },
 };
 export const STORE_NAMES = Object.keys(STORES);
@@ -70,6 +74,13 @@ export function parseBackup(text) {
       if (broken) return fail(`ファイルが壊れているようです（${label}の${i + 1}件目）。`);
     }
     data[name] = records;
+  }
+
+  // スタンプが入っていない古いバックアップ：学習記録から作り直す
+  if (!Array.isArray(source.stamps)) {
+    const rebuilt = rebuildStamps(data.decks, data.daily);
+    data.daily = rebuilt.daily;
+    data.stamps = rebuilt.stamps;
   }
 
   return {

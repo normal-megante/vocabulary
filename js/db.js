@@ -8,18 +8,22 @@
 //   decks    : 単語帳
 //   cards    : 単語（表・裏・例文・メモ）
 //   progress : 覚え具合の記録（単語 × 出題の向き ごと）
-//   daily    : 日ごとの学習記録（単語帳 × 日付 ごと。ノルマ・スタンプ用）
+//   daily    : 日ごとの学習記録（単語帳 × 日付 ごと。きょうのぶん・単語帳ごとのスタンプ用）
+//   stamps   : 全体のスタンプ（日付ごと）
 //   settings : アプリ全体の設定
 // =========================================================
+import { rebuildStamps } from './stamps.js';
 
 const DB_NAME = 'vocabulary';
 
 // データの形を変えるときは、この数字を1つ上げて、
 // 下の upgrade() に「前の形から新しい形への直し方」を書き足す。
 // （こうすると、すでに入っているデータを消さずに形を変えられる）
-const DB_VERSION = 1;
+//   1：最初の形
+//   2：全体のスタンプの棚（stamps）を追加（ステップ7）
+const DB_VERSION = 2;
 
-function upgrade(db, oldVersion) {
+function upgrade(db, oldVersion, tx) {
   if (oldVersion < 1) {
     db.createObjectStore('decks', { keyPath: 'id' });
 
@@ -36,8 +40,22 @@ function upgrade(db, oldVersion) {
 
     db.createObjectStore('settings', { keyPath: 'key' });
   }
-  // 例：将来 DB_VERSION を 2 にしたら、ここに
-  // if (oldVersion < 2) { ... } を書き足す
+  if (oldVersion < 2) {
+    db.createObjectStore('stamps', { keyPath: 'date' });
+    // すでに学習していた分に「達成」の印を付けて、スタンプを押しておく
+    if (oldVersion >= 1) {
+      const decksRequest = tx.objectStore('decks').getAll();
+      const dailyRequest = tx.objectStore('daily').getAll();
+      dailyRequest.onsuccess = () => {
+        const { daily, stamps } = rebuildStamps(decksRequest.result, dailyRequest.result);
+        const dailyStore = tx.objectStore('daily');
+        for (const record of daily) dailyStore.put(record);
+        const stampStore = tx.objectStore('stamps');
+        for (const stamp of stamps) stampStore.put(stamp);
+      };
+    }
+  }
+  // 将来 DB_VERSION を 3 にしたら、ここに if (oldVersion < 3) { ... } を書き足す
 }
 
 // ---- 保管庫を開く（最初の1回だけ実際に開き、あとは使い回す） ----
@@ -47,8 +65,16 @@ export function openDB() {
   if (!dbPromise) {
     dbPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onupgradeneeded = (event) => upgrade(request.result, event.oldVersion);
-      request.onsuccess = () => resolve(request.result);
+      request.onupgradeneeded = (event) => upgrade(request.result, event.oldVersion, request.transaction);
+      request.onsuccess = () => {
+        const db = request.result;
+        // 新しい版のアプリが別の画面で開かれたら、こちらは閉じて読み込み直す（新しい版の邪魔をしない）
+        db.onversionchange = () => {
+          db.close();
+          location.reload();
+        };
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
       request.onblocked = () => reject(new Error('アプリが別のタブでも開いています。ほかのタブを閉じてください。'));
     });

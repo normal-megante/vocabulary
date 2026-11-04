@@ -7,8 +7,9 @@ import {
 } from './db.js';
 import { STORE_NAMES } from './backup.js';
 import { DECK_DEFAULTS, APP_DEFAULTS } from './defaults.js';
-import { newId } from './util.js';
-import { countAvailable } from './srs.js';
+import { newId, toDateKey } from './util.js';
+import { countAvailable, addDays } from './srs.js';
+import { studyDay, isAchieved, addAnswer, recheckGoal, makeOverallStamp } from './stamps.js';
 
 // ---------------- 単語帳 ----------------
 
@@ -144,8 +145,9 @@ export async function listProgressForCard(cardId) {
 
 // 日ごとの学習記録の形：
 //   { id, deckId, date, answered（解いた数）, newCount（新しく出した単語の数）,
-//     good, hard, again（それぞれの答えの数） }
-// ※ いまは「今日の日付」で数えている。ステップ7で、猶予時間中は前日に数えるしくみを入れる。
+//     good, hard, again, choice（それぞれの答えの数）,
+//     goal（その日のきょうのぶんの問題数）, achieved（達成した ＝ 単語帳のスタンプ） }
+// date は「数える日」。猶予の時間（夜中）に前の日の分として数えたときは、前の日の日付になる。
 function emptyDaily(deckId, date) {
   return { id: `${deckId}:${date}`, deckId, date, answered: 0, newCount: 0, good: 0, hard: 0, again: 0, choice: 0 };
 }
@@ -154,41 +156,100 @@ export async function getDaily(deckId, date) {
   return (await getOne('daily', `${deckId}:${date}`)) ?? emptyDaily(deckId, date);
 }
 
+// この単語帳の「数える日」（夜中に前の日の分として数えるかどうかも、ここで決まる：stamps.js）
+//   → { day: '2026-11-04', late: 前の日の分として数えているか }
+export async function getStudyDay(deck, graceHour, now = new Date()) {
+  let yesterdayAchieved = true;
+  if (now.getHours() < graceHour && deck.dailyGoal > 0) {
+    yesterdayAchieved = isAchieved(await getDaily(deck.id, addDays(toDateKey(now), -1)));
+  }
+  return studyDay({ now, graceHour, goal: deck.dailyGoal, yesterdayAchieved });
+}
+
 // 1問答えたときの記録（覚え具合と、日ごとの記録を同時に保存する）
 //   progress    : srs.js の schedule() で計算した新しい覚え具合
 //   grade       : good / hard / again / choice（4択の正解）
 //   day         : 数える日（'2026-11-04' の形）
 //   countsAsNew : 「新しい単語」として数えるか
-export async function recordAnswer({ progress, grade, day, countsAsNew }) {
+//   goal        : この単語帳のきょうのぶんの問題数
+//   → { daily, achievedNow（この1問できょうのぶん達成）, goldNow（全体のスタンプが金色になった） }
+export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) {
   const db = await openDB();
   const tx = db.transaction(['progress', 'daily'], 'readwrite');
   tx.objectStore('progress').put(progress);
   const dailyStore = tx.objectStore('daily');
+  let result;
   dailyStore.get(`${progress.deckId}:${day}`).onsuccess = (event) => {
-    const daily = event.target.result ?? emptyDaily(progress.deckId, day);
-    daily.answered += 1;
-    daily[grade] = (daily[grade] ?? 0) + 1;
-    if (countsAsNew) daily.newCount += 1;
-    dailyStore.put(daily);
+    const current = event.target.result ?? emptyDaily(progress.deckId, day);
+    result = addAnswer(current, { grade, countsAsNew, goal });
+    dailyStore.put(result.daily);
   };
   await transactionDone(tx);
+
+  let goldNow = false;
+  if (result.achievedNow) {
+    ({ goldNow } = await refreshOverallStamp(day));
+  }
+  return { daily: result.daily, achievedNow: result.achievedNow, goldNow };
 }
 
-// ホーム画面用：単語帳ごとの「今日」のようす
-export async function getDeckToday(deck, today) {
+// ホーム画面用：単語帳ごとの「今日」のようす（day は数える日）
+export async function getDeckToday(deck, graceHour) {
+  const { day, late } = await getStudyDay(deck, graceHour);
   const [cards, progressList, daily] = await Promise.all([
     listCards(deck.id),
     listProgress(deck.id),
-    getDaily(deck.id, today),
+    getDaily(deck.id, day),
   ]);
   const available = countAvailable({
     cards,
     progressList,
     directions: deck.directions,
-    today,
+    today: day,
     newLimit: deck.newPerDay - daily.newCount,
   });
-  return { cardCount: cards.length, daily, ...available };
+  return { day, late, cardCount: cards.length, daily, ...available };
+}
+
+// ---------------- スタンプ ----------------
+
+// その日の全体のスタンプを作り直す（単語帳が達成したとき・設定を変えたときに呼ぶ）
+//   → { stamp, goldNow（いま金色になった） }
+export async function refreshOverallStamp(date) {
+  const [decks, dailies, previous] = await Promise.all([
+    listDecksWithCounts(),
+    getAllByIndex('daily', 'date', date),
+    getOne('stamps', date),
+  ]);
+  const stamp = makeOverallStamp(date, {
+    previous: previous ?? null,
+    achievedDeckIds: dailies.filter(isAchieved).map((daily) => daily.deckId),
+    activeDeckIds: decks.filter((deck) => deck.dailyGoal > 0 && deck.cardCount > 0).map((deck) => deck.id),
+  });
+  if (stamp && JSON.stringify(stamp) !== JSON.stringify(previous)) await putOne('stamps', stamp);
+  return { stamp, goldNow: Boolean(stamp?.gold && !previous?.gold) };
+}
+
+// 単語帳の問題数を変えたとき：その単語帳の「数える日」の記録を見直す
+// （下げてもう届いていれば達成にする。全体のスタンプも見直す）
+export async function recheckDeckToday(deck, graceHour) {
+  const { day } = await getStudyDay(deck, graceHour);
+  const saved = await getOne('daily', `${deck.id}:${day}`);
+  if (saved) {
+    const { daily } = recheckGoal(saved, deck.dailyGoal);
+    if (daily !== saved) await putOne('daily', daily);
+  }
+  await refreshOverallStamp(day);
+}
+
+// 全体のスタンプを全部
+export async function listOverallStamps() {
+  return getAll('stamps');
+}
+
+// この単語帳の、達成した日の記録を全部
+export async function listAchievedDays(deckId) {
+  return (await getAllByIndex('daily', 'deckId', deckId)).filter(isAchieved);
 }
 
 // ---------------- バックアップ用：全データの読み出し・置き換え ----------------

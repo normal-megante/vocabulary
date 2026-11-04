@@ -11,6 +11,9 @@ import { installState, promptInstall, onInstallChange } from '../install.js';
 
 export const title = '設定';
 
+// 猶予時刻の選択肢（0 は「使わない」）
+const GRACE_CHOICES = [0, 1, 2, 3, 4, 5, 6];
+
 // 「ホーム画面に追加」の欄（アプリとして開いているときは出さない）
 function installSection(state) {
   if (state === 'app') return '';
@@ -60,12 +63,15 @@ export async function render(el, { refresh, signal }) {
     </section>
 
     <section class="card">
-      <h3>学習の設定</h3>
-      <dl class="info-list">
-        <dt>猶予時刻</dt><dd>午前${settings.graceHour}時まで</dd>
-      </dl>
-      <p class="muted" style="margin-top:8px">※ 変更できるようになるのはステップ7です。<br>
-      ${GOAL_LABEL}と新しい単語の数は、単語帳ごとに設定します。</p>
+      <h3>🌙 夜中の猶予時刻</h3>
+      <p class="muted">夜中の0時を過ぎても、この時刻までは、前の日の「${GOAL_LABEL}」がまだ達成されていなければ、前の日の分として数えます（前の日のスタンプにできます）。</p>
+      <select id="grace-select" aria-label="猶予時刻" style="margin-top:10px">
+        ${GRACE_CHOICES.map((hour) => `
+          <option value="${hour}" ${hour === settings.graceHour ? 'selected' : ''}>
+            ${hour === 0 ? '使わない（0時で次の日）' : `午前${hour}時まで`}
+          </option>`).join('')}
+      </select>
+      <p class="muted" style="margin-top:10px">「${GOAL_LABEL}」の問題数・新しい単語の数・出題の向きは、単語帳ごとの画面で設定します。</p>
     </section>
 
     <section class="card">
@@ -87,6 +93,13 @@ export async function render(el, { refresh, signal }) {
   });
   // 追加できるようになった・追加された、などのときは表示を更新
   onInstallChange(() => refresh(), signal);
+
+  // ---- 猶予時刻（選んだらすぐ保存） ----
+  el.querySelector('#grace-select').addEventListener('change', async (event) => {
+    const graceHour = Number(event.target.value);
+    await saveSettings({ graceHour });
+    showToast(graceHour === 0 ? '猶予時刻を使わないようにしました' : `猶予時刻を午前${graceHour}時にしました`);
+  });
 
   // ---- バックアップを保存 ----
   el.querySelector('#export-btn').addEventListener('click', async () => {

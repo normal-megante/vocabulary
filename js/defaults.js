@@ -5,14 +5,15 @@
 // =========================================================
 
 // アプリのバージョン（設定画面に表示）
-export const APP_VERSION = '0.6.0（ステップ6）';
+export const APP_VERSION = '0.7.0（ステップ7）';
 
 // 「1日に解く問題数の目標」の呼び名（画面に出る言葉）
-export const GOAL_LABEL = 'ノルマ';
+// （候補だったもの：ノルマ／今日のめやす／デイリーミッション。ここを書き換えれば全部の画面が変わる）
+export const GOAL_LABEL = 'きょうのぶん';
 
 // 新しく単語帳を作ったときの初期設定
 export const DECK_DEFAULTS = {
-  dailyGoal: 20,       // 1日のノルマ（問題数）
+  dailyGoal: 20,       // 1日のきょうのぶん（問題数）。0 なら「きょうのぶん」とスタンプの対象外
   newPerDay: 10,       // 1日に出す新しい単語の数
   directions: 'both',  // 出題の向き：'both'=両方, 'forward'=表→裏だけ, 'backward'=裏→表だけ
   studyFormat: 'flip', // 前回えらんだ出し方：'flip'=めくる, 'choice'=4択, 'type'=入力, 'auto'=おまかせ
@@ -34,5 +35,5 @@ export const BACKUP_REMINDER_DAYS = 7;  // 最後のバックアップからこ�
 export const INTERVALS = [0, 1, 3, 7, 14, 30, 60, 120];
 
 // ---- 学習 ----
-export const EXTRA_SESSION_SIZE = 10;  // ノルマ達成後に「もう少しやる」ときの問題数
+export const EXTRA_SESSION_SIZE = 10;  // きょうのぶん達成後に「もう少しやる」ときの問題数
 export const REASK_GAP = 3;            // 「忘れてた」単語を、何問あとにもう一度出すか

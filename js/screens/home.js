@@ -1,9 +1,10 @@
 // =========================================================
-// ホーム画面：今日の学習の入り口
+// ホーム画面：今日の学習の入り口と、スタンプの連続記録
 // =========================================================
-import { listDecks, getDeckToday, getSettings } from '../data.js';
+import { listDecks, getDeckToday, getSettings, listOverallStamps } from '../data.js';
 import { escapeHtml, formatDateJa, toDateKey } from '../util.js';
-import { BACKUP_REMINDER_DAYS } from '../defaults.js';
+import { streakOf, inGrace, isAchieved } from '../stamps.js';
+import { BACKUP_REMINDER_DAYS, GOAL_LABEL } from '../defaults.js';
 
 export const title = 'ホーム';
 
@@ -22,22 +23,46 @@ export async function render(el) {
     return;
   }
 
-  const today = toDateKey();
-  const [todays, settings] = await Promise.all([
-    Promise.all(decks.map((deck) => getDeckToday(deck, today))),
-    getSettings(),
+  const settings = await getSettings();
+  const [todays, stamps] = await Promise.all([
+    Promise.all(decks.map((deck) => getDeckToday(deck, settings.graceHour))),
+    listOverallStamps(),
   ]);
   const totalCards = todays.reduce((sum, t) => sum + t.cardCount, 0);
 
   el.innerHTML = `
     <p class="today">${formatDateJa()}</p>
+    ${streakCard(stamps, settings.graceHour)}
     <section>
       <h2 class="section-title">今日の学習</h2>
       <ul class="deck-list">
-        ${decks.map((deck, i) => deckItem(deck, todays[i])).join('')}
+        ${decks.map((deck, i) => deckItem(deck, todays[i], settings.graceHour)).join('')}
       </ul>
     </section>
     ${totalCards > 0 ? backupReminder(settings.lastBackupAt) : ''}`;
+}
+
+// 連続記録と今日のスタンプ（タップでスタンプカードへ）
+function streakCard(stamps, graceHour) {
+  const now = new Date();
+  const today = toDateKey(now);
+  const streak = streakOf(new Set(stamps.map((s) => s.date)), today, { graceActive: inGrace(now, graceHour) });
+  const todayStamp = stamps.find((s) => s.date === today);
+
+  let sub;
+  if (todayStamp?.gold) sub = '今日は金色のスタンプ！';
+  else if (todayStamp) sub = '今日のスタンプ、ゲットずみ！';
+  else sub = `どれか1冊の「${GOAL_LABEL}」を達成するとスタンプ`;
+
+  return `
+    <a class="card streak-card" href="#/stamps">
+      <span class="stamp${todayStamp ? (todayStamp.gold ? ' gold' : '') : ' empty'}" aria-hidden="true">★</span>
+      <span class="streak-text">
+        <b>${streak > 0 ? `🔥 ${streak}日連続！` : 'スタンプを集めよう'}</b>
+        <span class="muted">${escapeHtml(sub)}</span>
+      </span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </a>`;
 }
 
 // しばらくバックアップしていなければ、お知らせを出す
@@ -56,28 +81,40 @@ function backupReminder(lastBackupAt) {
     </a>`;
 }
 
-function deckItem(deck, today) {
-  const answered = today.daily.answered;
+function deckItem(deck, info, graceHour) {
+  const { daily, late } = info;
+  const answered = daily.answered;
   const goal = deck.dailyGoal;
-  const done = goal > 0 && answered >= goal;
-  const percent = goal > 0 ? Math.min(100, Math.round((answered / goal) * 100)) : 0;
+  const done = isAchieved(daily);
 
   let stats;
-  if (today.cardCount === 0) {
+  if (info.cardCount === 0) {
     stats = '<span>単語がまだありません</span>';
   } else {
-    stats = `<span>復習 ${today.due}</span><span>新しい単語 ${today.fresh}</span>`;
+    stats = `<span>復習 ${info.due}</span><span>新しい単語 ${info.fresh}</span>`;
+  }
+
+  let goalRow;
+  if (goal <= 0) {
+    goalRow = `<div class="goal-row"><span class="goal-text">「${GOAL_LABEL}」なし・今日 ${answered}問</span></div>`;
+  } else {
+    const percent = done ? 100 : Math.min(100, Math.round((answered / goal) * 100));
+    goalRow = `
+      <div class="goal-row">
+        <div class="progress"><div class="progress-bar ${done ? 'done' : ''}" style="width:${percent}%"></div></div>
+        <span class="goal-text ${done ? 'done' : ''}">
+          ${done ? '<span class="stamp tiny deck" aria-hidden="true">★</span>達成！' : `${answered} / ${goal}問`}
+        </span>
+      </div>`;
   }
 
   return `
     <li class="card deck-item">
       <div class="deck-info">
         <span class="deck-name">${escapeHtml(deck.name)}</span>
+        ${late ? `<span class="late-note">🌙 午前${graceHour}時までは、昨日の分として数えます</span>` : ''}
         <div class="today-stats">${stats}</div>
-        <div class="goal-row">
-          <div class="progress"><div class="progress-bar ${done ? 'done' : ''}" style="width:${percent}%"></div></div>
-          <span class="goal-text ${done ? 'done' : ''}">${done ? '達成！' : `${answered} / ${goal}問`}</span>
-        </div>
+        ${goalRow}
       </div>
       <a class="btn primary small" href="#/study/${encodeURIComponent(deck.id)}"
          aria-label="${escapeHtml(deck.name)}を学習する">学習</a>

@@ -1,18 +1,26 @@
 // =========================================================
 // 単語帳の中身の画面：単語の一覧・この単語帳の設定
 // =========================================================
-import { getDeck, listCards, updateDeck, deleteDeck } from '../data.js';
-import { escapeHtml, normalizeKey } from '../util.js';
-import { confirmDialog, promptDialog, showToast } from '../ui.js';
+import {
+  getDeck, listCards, updateDeck, deleteDeck, getSettings, recheckDeckToday, refreshOverallStamp,
+} from '../data.js';
+import { escapeHtml, normalizeKey, toDateKey } from '../util.js';
+import { confirmDialog, promptDialog, showToast, alertDialog } from '../ui.js';
 import { replaceLocation } from '../nav.js';
 import { GOAL_LABEL } from '../defaults.js';
 
 export const title = '単語帳';
 
 const DIRECTION_LABELS = {
-  both: '両方',
+  both: '両方（表→裏 と 裏→表）',
   forward: '表→裏だけ',
   backward: '裏→表だけ',
+};
+
+// 設定できる数の範囲
+const LIMITS = {
+  dailyGoal: { min: 0, max: 500 },
+  newPerDay: { min: 0, max: 200 },
 };
 
 // 単語の一覧は、一度にこの数まで表示する（多すぎると重くなるため）
@@ -64,12 +72,28 @@ export async function render(el, { params, setTitle, refresh }) {
 
     <section class="card">
       <h3>この単語帳の設定</h3>
-      <dl class="info-list">
-        <dt>1日の${GOAL_LABEL}</dt><dd>${deck.dailyGoal}問</dd>
-        <dt>1日の新しい単語</dt><dd>${deck.newPerDay}語</dd>
-        <dt>出題の向き</dt><dd>${DIRECTION_LABELS[deck.directions] ?? deck.directions}</dd>
-      </dl>
-      <p class="muted" style="margin-top:8px">※ 変更できるようになるのはステップ7です。</p>
+      <form id="settings-form" class="form-stack" novalidate>
+        <label class="field-label" for="goal-input">「${GOAL_LABEL}」（1日に解く問題数）</label>
+        <div class="number-row">
+          <input id="goal-input" type="number" inputmode="numeric" min="${LIMITS.dailyGoal.min}" max="${LIMITS.dailyGoal.max}"
+                 step="1" value="${deck.dailyGoal}"> 問
+        </div>
+        <p class="muted hint">達成するとスタンプがもらえます。0 にすると、この単語帳は「${GOAL_LABEL}」とスタンプの対象外になります。</p>
+
+        <label class="field-label" for="new-input">1日に出す新しい単語</label>
+        <div class="number-row">
+          <input id="new-input" type="number" inputmode="numeric" min="${LIMITS.newPerDay.min}" max="${LIMITS.newPerDay.max}"
+                 step="1" value="${deck.newPerDay}"> 語
+        </div>
+
+        <span class="field-label">出題の向き</span>
+        <div class="radio-list">
+          ${Object.entries(DIRECTION_LABELS).map(([value, label]) => `
+            <label><input type="radio" name="directions" value="${value}" ${deck.directions === value ? 'checked' : ''}> ${label}</label>`).join('')}
+        </div>
+
+        <button class="btn primary block" type="submit" style="margin-top:8px">設定を保存</button>
+      </form>
     </section>
 
     <div class="button-row">
@@ -78,6 +102,24 @@ export async function render(el, { params, setTitle, refresh }) {
     </div>`;
 
   if (cards.length > 0) setupWordList(el, deckUrl, cards);
+
+  // この単語帳の設定を保存
+  el.querySelector('#settings-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const dailyGoal = readNumber(el.querySelector('#goal-input'), LIMITS.dailyGoal);
+    const newPerDay = readNumber(el.querySelector('#new-input'), LIMITS.newPerDay);
+    if (dailyGoal === null || newPerDay === null) {
+      await alertDialog(`数は ${LIMITS.dailyGoal.min}〜${LIMITS.dailyGoal.max} の整数で入れてください（新しい単語は ${LIMITS.newPerDay.max} まで）。`);
+      return;
+    }
+    const directions = el.querySelector('input[name="directions"]:checked').value;
+    const updated = await updateDeck(deck.id, { dailyGoal, newPerDay, directions });
+    // 問題数を下げて、もう届いていたら達成にする（スタンプも見直す）
+    const { graceHour } = await getSettings();
+    await recheckDeckToday(updated, graceHour);
+    showToast('設定を保存しました');
+    refresh();
+  });
 
   // 名前を変える
   el.querySelector('#rename-btn').addEventListener('click', async () => {
@@ -96,9 +138,19 @@ export async function render(el, { params, setTitle, refresh }) {
     );
     if (!ok) return;
     await deleteDeck(deck.id);
+    // 残りの単語帳が全部達成ずみなら、今日の全体のスタンプが金色になることもある
+    await refreshOverallStamp(toDateKey());
     showToast(`「${deck.name}」を削除しました`);
     replaceLocation('#/decks');
   });
+}
+
+// 数の入力欄を読む（範囲外・整数でなければ null）
+function readNumber(input, { min, max }) {
+  const text = input.value.trim().normalize('NFKC');
+  if (!/^\d+$/.test(text)) return null;
+  const value = Number(text);
+  return value >= min && value <= max ? value : null;
 }
 
 // 単語の一覧（検索と「さらに表示」つき）

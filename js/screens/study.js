@@ -7,13 +7,17 @@
 //   入力   … 答えを打ち込む → 答え合わせ →「次へ」（打ち間違いは「合ってたことにする」）
 // 1問ごとに保存するので、途中でやめても、それまでの分は記録されます。
 // （4択・入力は「次へ」を押したときに保存）
+// 夜中の猶予の時間に、前の日のきょうのぶんがまだなら、前の日の分として数えます（stamps.js）。
 // =========================================================
-import { getDeck, updateDeck, listCards, listProgress, getDaily, recordAnswer } from '../data.js';
+import {
+  getDeck, updateDeck, listCards, listProgress, getDaily, recordAnswer, getSettings, getStudyDay,
+} from '../data.js';
+import { isAchieved } from '../stamps.js';
 import { buildQueue, schedule, nextLabel, isNew } from '../srs.js';
 import {
   FORMATS, buildChoices, canUseChoice, checkTyped, compareKey, pickFormat, questionOf, answerOf,
 } from '../quiz.js';
-import { escapeHtml, toDateKey } from '../util.js';
+import { escapeHtml } from '../util.js';
 import { showToast } from '../ui.js';
 import { GOAL_LABEL, EXTRA_SESSION_SIZE, REASK_GAP } from '../defaults.js';
 
@@ -59,14 +63,18 @@ export async function render(el, { params, setTitle, signal }) {
     return;
   }
   const choiceOk = canUseChoice(cards, deck.directions);
+  const { graceHour } = await getSettings();
 
   // 今回の学習のようす
   const session = {
     format: deck.studyFormat, // 選んだ出し方（flip / choice / type / auto）
+    day: null,                // 数える日（'2026-11-04' の形。夜中は前の日のこともある）
+    late: false,              // 前の日の分として数えているか
     queue: [],                // 出す問題の列
     index: 0,                 // いま何問目か
     answered: 0,              // 今回答えた数
     results: { right: 0, hard: 0, wrong: 0 },
+    stamp: null,              // 今回スタンプをもらったら { gold }
   };
   let mode = 'picker'; // いまの画面：picker（出し方選び）/ question（問題）/ other
   let current = null;  // いま出している問題のようす
@@ -74,35 +82,46 @@ export async function render(el, { params, setTitle, signal }) {
 
   // ---- 出す問題の列を作る ----
   async function makeQueue() {
-    const today = toDateKey();
-    const [progressList, daily] = await Promise.all([listProgress(deck.id), getDaily(deck.id, today)]);
-    const remaining = deck.dailyGoal - daily.answered;
+    const { day, late } = await getStudyDay(deck, graceHour);
+    const [progressList, daily] = await Promise.all([listProgress(deck.id), getDaily(deck.id, day)]);
+    const remaining = remainingOf(daily);
     const queue = buildQueue({
       cards,
       progressList,
       directions: deck.directions,
-      today,
+      today: day,
       newLimit: deck.newPerDay - daily.newCount,
       size: remaining > 0 ? remaining : EXTRA_SESSION_SIZE,
     });
-    return { queue, daily, remaining };
+    return { queue, daily, remaining, day, late };
   }
+
+  // きょうのぶんの残りの問題数（達成ずみ・設定なしなら 0）
+  function remainingOf(daily) {
+    if (deck.dailyGoal <= 0 || isAchieved(daily)) return 0;
+    return Math.max(0, deck.dailyGoal - daily.answered);
+  }
+
+  // 「今日」か「昨日」か
+  const dayWord = (late) => (late ? '昨日' : '今日');
 
   // ---- 出し方を選ぶ画面 ----
   async function showPicker() {
-    const { queue, daily, remaining } = await makeQueue();
+    const { queue, daily, remaining, late } = await makeQueue();
     if (queue.length === 0) {
       showNothing();
       return;
     }
     mode = 'picker';
     current = null;
-    const goalText = remaining > 0
-      ? `今日は ${daily.answered}問・あと${remaining}問で${GOAL_LABEL}達成`
-      : `今日は ${daily.answered}問・${GOAL_LABEL}達成ずみ！`;
+    let goalText;
+    if (deck.dailyGoal <= 0) goalText = `${dayWord(late)}は ${daily.answered}問（「${GOAL_LABEL}」の設定なし）`;
+    else if (remaining > 0) goalText = `${dayWord(late)}は ${daily.answered}問・あと${remaining}問で「${GOAL_LABEL}」達成`;
+    else goalText = `${dayWord(late)}の「${GOAL_LABEL}」は達成ずみ！（${daily.answered}問）`;
     el.innerHTML = `
       <section class="card">
         <h2>出し方を選ぶ</h2>
+        ${late ? `<p class="late-note">🌙 いまは昨日の分として数えています（午前${graceHour}時まで）</p>` : ''}
         <p class="muted">${escapeHtml(goalText)}</p>
         <div class="format-list">
           ${FORMATS.map((f, i) => {
@@ -140,11 +159,14 @@ export async function render(el, { params, setTitle, signal }) {
 
   // ---- 学習を始める（「続ける」でもここから） ----
   async function startSession() {
-    const { queue } = await makeQueue();
+    const { queue, day, late } = await makeQueue();
     session.queue = queue;
+    session.day = day;
+    session.late = late;
     session.index = 0;
     session.answered = 0;
     session.results = { right: 0, hard: 0, wrong: 0 };
+    session.stamp = null;
     if (queue.length === 0) {
       showNothing();
     } else {
@@ -218,7 +240,7 @@ export async function render(el, { params, setTitle, signal }) {
   // めくる
   // =======================================================
   function flipActions(item) {
-    const today = toDateKey();
+    const today = session.day;
     return `
       <div class="study-actions">
         <button class="btn primary block big" type="button" id="reveal-btn">答えを見る</button>
@@ -377,7 +399,7 @@ export async function render(el, { params, setTitle, signal }) {
   // =======================================================
   function showFeedback(right, extraHtml, titleText = null) {
     const { item } = current;
-    const today = toDateKey();
+    const today = session.day;
     const after = schedule(item.progress, current.pending, today);
     const label = nextLabel(item.progress, current.pending, today);
     let message;
@@ -409,14 +431,16 @@ export async function render(el, { params, setTitle, signal }) {
     if (!current || busy || !grade) return;
     busy = true;
     const { item, format } = current;
-    const today = toDateKey();
+    const today = session.day;
     const updated = { ...schedule(item.progress, grade, today), lastFormat: format };
+    let saved;
     try {
-      await recordAnswer({
+      saved = await recordAnswer({
         progress: updated,
         grade,
         day: today,
         countsAsNew: item.kind === 'new' && isNew(item.progress),
+        goal: deck.dailyGoal,
       });
     } catch (error) {
       console.error(error);
@@ -429,6 +453,12 @@ export async function render(el, { params, setTitle, signal }) {
     if (grade === 'again') session.results.wrong += 1;
     else if (grade === 'hard') session.results.hard += 1;
     else session.results.right += 1;
+
+    // この1問できょうのぶんを達成したら、スタンプ！
+    if (saved.achievedNow) {
+      session.stamp = { gold: saved.goldNow };
+      showToast(saved.goldNow ? '👑 全部の単語帳を達成！ 金色のスタンプ！' : `🎉 「${GOAL_LABEL}」達成！ スタンプゲット！`);
+    }
 
     // まちがえたら、少しあとにもう一度出す
     if (grade === 'again') {
@@ -449,27 +479,40 @@ export async function render(el, { params, setTitle, signal }) {
   async function showResult() {
     mode = 'other';
     current = null;
-    const daily = await getDaily(deck.id, toDateKey());
-    const remaining = deck.dailyGoal - daily.answered;
-    const done = remaining <= 0;
+    const [daily, next] = await Promise.all([getDaily(deck.id, session.day), getStudyDay(deck, graceHour)]);
+    const remaining = remainingOf(daily);
+    const hasGoal = deck.dailyGoal > 0;
+    const done = hasGoal && isAchieved(daily);
     const labels = RESULT_LABELS[session.format] ?? RESULT_LABELS.auto;
     const cellClass = { right: 'good', hard: 'hard', wrong: 'again' };
 
+    // 次のボタン：昨日の分が終わって今日の分に切りかわるとき・続き・もう少し
+    let moreLabel;
+    if (next.day !== session.day) moreLabel = '今日の分をはじめる';
+    else if (remaining > 0) moreLabel = `続ける（あと${remaining}問で達成）`;
+    else moreLabel = `もう${EXTRA_SESSION_SIZE}問やる`;
+
+    const stamp = session.stamp;
+    const stampHtml = stamp ? `
+      <div class="stamp-get">
+        <span class="stamp big${stamp.gold ? ' gold' : ' deck'}" aria-hidden="true">★</span>
+        <p><b>${stamp.gold ? '金色のスタンプ！' : 'スタンプゲット！'}</b><br>
+          <span class="muted">${stamp.gold ? '全部の単語帳の「' + GOAL_LABEL + '」を達成しました' : `「${GOAL_LABEL}」を達成しました`}${session.late ? '（昨日の分）' : ''}</span></p>
+      </div>` : '';
+
     el.innerHTML = `
       <section class="card hero result">
-        <p class="hero-emoji">${done ? '🎉' : '👏'}</p>
+        ${stampHtml || `<p class="hero-emoji">${done ? '🎉' : '👏'}</p>`}
         <h2>おつかれさま！</h2>
         <p>今回は <b>${session.answered}問</b> 解きました。</p>
         <div class="result-grid${labels.length === 2 ? ' two' : ''}">
           ${labels.map(([key, label]) => `
             <div class="result-cell ${cellClass[key]}">${label}<b>${session.results[key]}</b></div>`).join('')}
         </div>
-        <p>今日の合計：<b>${daily.answered}問</b>
-          <span class="muted">（${GOAL_LABEL} ${deck.dailyGoal}問${done ? '・達成！' : ''}）</span></p>
+        <p>${dayWord(session.late)}の合計：<b>${daily.answered}問</b>
+          ${hasGoal ? `<span class="muted">（「${GOAL_LABEL}」${daily.goal ?? deck.dailyGoal}問${done ? '・達成！' : ''}）</span>` : ''}</p>
         <div class="stack">
-          <button class="btn primary block" type="button" id="more-btn">
-            ${done ? `もう${EXTRA_SESSION_SIZE}問やる` : `続ける（あと${remaining}問で達成）`}
-          </button>
+          <button class="btn primary block" type="button" id="more-btn">${moreLabel}</button>
           <button class="btn block" type="button" id="change-btn">出し方を変える</button>
           <a class="btn block" href="#/home">ホームへ</a>
         </div>

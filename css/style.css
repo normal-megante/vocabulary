@@ -773,6 +773,199 @@ a.deck-item:active { background: var(--surface-2); }
   margin-top: 16px;
 }
 
+/* ----- スタンプ ----- */
+.stamp {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.45);
+  transform: rotate(-12deg);
+}
+.stamp.deck { background: var(--primary); color: #fff; }
+.stamp.gold {
+  background: radial-gradient(circle at 30% 30%, #fff6c4, #f5c518 48%, #c79a00);
+  color: #7a5600;
+  box-shadow: 0 0 0 2px #f5c518, 0 0 10px rgba(245, 197, 24, 0.7);
+}
+.stamp.empty {
+  background: transparent;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 2px var(--border);
+}
+.stamp.tiny { width: 18px; height: 18px; margin-right: 4px; font-size: 11px; vertical-align: -3px; }
+.stamp.big { width: 84px; height: 84px; font-size: 46px; }
+
+/* 結果画面の「スタンプゲット！」 */
+.stamp-get {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.stamp-get .stamp { animation: stamp-press 0.5s ease-out; }
+@keyframes stamp-press {
+  0% { transform: scale(2.4) rotate(-30deg); opacity: 0; }
+  60% { transform: scale(0.9) rotate(-10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-12deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stamp-get .stamp { animation: none; }
+}
+
+/* 夜中に「昨日の分」として数えているときのお知らせ */
+.late-note {
+  display: block;
+  margin: 2px 0;
+  color: #8a5a00;
+  font-size: 13px;
+  font-weight: 700;
+}
+@media (prefers-color-scheme: dark) {
+  .late-note { color: #ffc65c; }
+}
+
+/* ホームの連続記録 */
+.streak-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: inherit;
+  text-decoration: none;
+}
+.streak-card .stamp { width: 44px; height: 44px; font-size: 24px; }
+.streak-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  line-height: 1.4;
+}
+.streak-text b { font-size: 18px; }
+.chevron { color: var(--muted); font-size: 24px; }
+
+/* スタンプカード画面 */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.chip {
+  flex: none;
+  max-width: 70vw;
+  padding: 6px 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chip.active { border-color: transparent; background: var(--primary); color: var(--on-primary); }
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 8px;
+}
+.stat {
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.stat b { display: block; color: var(--text); font-size: 24px; }
+.stat small { margin-left: 2px; font-size: 12px; }
+.cal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16px 0 8px;
+}
+.cal-nav b { font-size: 17px; }
+.cal-nav .btn { min-width: 46px; font-size: 20px; }
+.calendar {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cal-head {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+}
+.cal-head.sun { color: var(--danger); }
+.cal-head.sat { color: var(--primary); }
+.cal-day {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.cal-day.blank { background: transparent; }
+.cal-day.future { opacity: 0.45; }
+.cal-day.today { box-shadow: inset 0 0 0 2px var(--primary); }
+.cal-num {
+  position: absolute;
+  top: 2px;
+  left: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.cal-day .stamp { width: min(30px, 72%); height: min(30px, 72%); font-size: 15px; }
+
+/* 設定の数字の入力 */
+.number-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+input[type="number"],
+select {
+  min-height: 46px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+input[type="number"] { width: 110px; text-align: right; }
+select { width: 100%; }
+input[type="number"]:focus,
+select:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+.form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.form-stack .field-label { margin: 10px 0 2px; }
+.form-stack .hint { margin: 0; font-size: 13px; }
+
 /* 単語の編集画面の「覚え具合」 */
 .level-dots {
   color: var(--primary);

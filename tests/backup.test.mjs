@@ -12,6 +12,7 @@ const sampleData = {
   ],
   progress: [{ id: 'c1:f', cardId: 'c1', deckId: 'd1', dir: 'f', level: 1, due: '2026-11-05', reps: 1 }],
   daily: [{ id: 'd1:2026-11-04', deckId: 'd1', date: '2026-11-04', answered: 3, newCount: 1 }],
+  stamps: [{ date: '2026-11-04', decks: ['d1'], gold: false }],
   settings: [{ key: 'app', value: { graceHour: 3 } }],
 };
 
@@ -58,4 +59,27 @@ test('必要な項目が欠けた記録があれば、どこが壊れている�
 
 test('ファイル名に日付と時刻が入る', () => {
   assert.equal(backupFileName(new Date(2026, 10, 4, 9, 5)), 'vocabulary-backup-2026-11-04-0905.json');
+});
+
+test('スタンプが入っていない古いバックアップは、学習記録からスタンプを作り直す', () => {
+  const old = {
+    app: 'vocabulary',
+    format: 1,
+    appVersion: '0.6.0（ステップ6）',
+    exportedAt: '2026-11-04T12:00:00.000Z',
+    data: {
+      decks: [{ id: 'd1', name: '英単語', dailyGoal: 3 }],
+      cards: [],
+      progress: [],
+      daily: [
+        { id: 'd1:2026-11-03', deckId: 'd1', date: '2026-11-03', answered: 5 },
+        { id: 'd1:2026-11-04', deckId: 'd1', date: '2026-11-04', answered: 1 },
+      ],
+      settings: [],
+    },
+  };
+  const result = parseBackup(JSON.stringify(old));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.backup.data.daily.map((d) => d.achieved), [true, false]);
+  assert.deepEqual(result.backup.data.stamps, [{ date: '2026-11-03', decks: ['d1'], gold: false }]);
 });
