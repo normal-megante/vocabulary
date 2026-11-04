@@ -7,6 +7,8 @@
 //         'gold' … 金色のスタンプのボーナス（id ＝ 'gold:日付'）
 //         'buy'  … コインでアイテムと交換（id ＝ 'buy:ランダムな文字'）
 //         'use'  … アイテムを使った（お休みチケットは id ＝ 'rest:お休みにした日'）
+//         'bingo'  … スタンプカードのビンゴ（bingo.js。id ＝ 'bingo:2026-11:row1' など）
+//         'trophy' … トロフィー（trophies.js。id ＝ 'trophy:streak3' など）
 // ・同じ id は1回しか記録されないので、同じ日に同じ単語帳で2回コインをもらうことはない。
 // ・単語帳を消しても通帳は消さない（もらったコインは減らない）。
 // ・いまのコインや持っているアイテムの数は、通帳を全部足して出す。
@@ -37,18 +39,21 @@ export function restEntry(date, at = Date.now()) {
 
 // ---------------------------------------------------------
 // 通帳から、いまのようすを出す
-//   → { coins: コインの枚数, items: { rest: 持っている数, ... }, restDates: お休みにした日の Set }
+//   → { coins: コインの枚数, items: { rest: 持っている数, ... }, restDates: お休みにした日の Set,
+//       trophies: 取ったトロフィーの数 }
 // ---------------------------------------------------------
 export function walletOf(entries) {
   let coins = 0;
+  let trophies = 0;
   const items = Object.fromEntries(Object.keys(ITEMS).map((key) => [key, 0]));
   const restDates = new Set();
   for (const entry of entries) {
     coins += entry.coins ?? 0;
     if (entry.item) items[entry.item] = (items[entry.item] ?? 0) + (entry.count ?? 0);
     if (entry.type === 'use' && entry.item === 'rest') restDates.add(entry.date);
+    if (entry.type === 'trophy') trophies++;
   }
-  return { coins, items, restDates };
+  return { coins, items, restDates, trophies };
 }
 
 // ---------------------------------------------------------

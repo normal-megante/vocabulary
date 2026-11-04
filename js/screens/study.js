@@ -10,10 +10,11 @@
 // 夜中の猶予の時間に、前の日のきょうのぶんがまだなら、前の日の分として数えます（stamps.js）。
 // =========================================================
 import {
-  getDeck, updateDeck, listCards, listProgress, getDaily, recordAnswer, getSettings, getStudyDay,
+  getDeck, updateDeck, listCards, listProgress, getDaily, recordAnswer, getSettings, getStudyDay, claimTrophies,
 } from '../data.js';
 import { isAchieved } from '../stamps.js';
 import { bingoMessage } from '../bingo.js';
+import { achievementEvents, trophyMessages } from '../trophies.js';
 import { buildQueue, schedule, nextLabel, isNew } from '../srs.js';
 import {
   FORMATS, buildChoices, canUseChoice, checkTyped, compareKey, pickFormat, questionOf, answerOf,
@@ -464,6 +465,8 @@ export async function render(el, { params, setTitle, signal }) {
         : `🎉 「${GOAL_LABEL}」達成！ スタンプと 🪙${saved.coins} ゲット！`);
       // スタンプカードのビンゴがそろったら、もう1つお知らせ
       if (saved.bingos.length > 0) showToast(bingoMessage(saved.bingos));
+      // トロフィー（夜ふかし・早起きは、達成したこの瞬間に判定）
+      await announceTrophies(achievementEvents({ late: session.late }));
     }
 
     // まちがえたら、少しあとにもう一度出す
@@ -485,6 +488,8 @@ export async function render(el, { params, setTitle, signal }) {
   async function showResult() {
     mode = 'other';
     current = null;
+    // 「合計100問」などのトロフィーは、1回の学習が終わったときに判定する
+    await announceTrophies();
     const [daily, next] = await Promise.all([getDaily(deck.id, session.day), getStudyDay(deck, graceHour)]);
     const remaining = remainingOf(daily);
     const hasGoal = deck.dailyGoal > 0;
@@ -584,6 +589,17 @@ export async function render(el, { params, setTitle, signal }) {
   }, { signal });
 
   await showPicker();
+}
+
+// 条件を満たしたトロフィーを受け取って、お知らせを出す
+// （判定に失敗しても学習は続けられるように、エラーは記録だけ）
+async function announceTrophies(events = []) {
+  try {
+    const claimed = await claimTrophies(events);
+    for (const message of trophyMessages(claimed.found, claimed.ownedBefore)) showToast(message);
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 // 文字の長さに合わせて、問題の文字の大きさを変える

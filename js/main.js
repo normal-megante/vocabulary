@@ -12,6 +12,7 @@ import * as importScreen from './screens/import.js';
 import * as card from './screens/card.js';
 import * as study from './screens/study.js';
 import * as stamps from './screens/stamps.js';
+import * as trophies from './screens/trophies.js';
 import * as settings from './screens/settings.js';
 import { escapeHtml } from './util.js';
 import { enterEntry, saveScroll, savedScroll, goBack, replaceLocation } from './nav.js';
@@ -29,6 +30,7 @@ const routes = [
   { path: /^\/decks\/([^/]+)\/cards\/([^/]+)$/, screen: card, tab: 'decks', back: (deckId) => `#/decks/${deckId}` },
   { path: /^\/study\/([^/]+)$/, screen: study, tab: null, back: () => '#/home' },
   { path: /^\/stamps$/, screen: stamps, tab: 'stamps' },
+  { path: /^\/trophies$/, screen: trophies, tab: 'stamps', back: () => '#/stamps' },
   { path: /^\/settings$/, screen: settings, tab: 'settings' },
 ];
 

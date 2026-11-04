@@ -2,9 +2,10 @@
 // ホーム画面：今日の学習の入り口と、スタンプの連続記録
 // =========================================================
 import {
-  listDecks, getDeckToday, getSettings, listOverallStamps, getWallet, useRestTickets, claimBingos,
+  listDecks, getDeckToday, getSettings, listOverallStamps, getWallet, useRestTickets, claimBingos, claimTrophies,
 } from '../data.js';
 import { bingoMessage } from '../bingo.js';
+import { titleOf, trophyMessages } from '../trophies.js';
 import { escapeHtml, formatDateJa, toDateKey } from '../util.js';
 import { streakOf, inGrace, isAchieved } from '../stamps.js';
 import { BACKUP_REMINDER_DAYS, GOAL_LABEL, ITEMS } from '../defaults.js';
@@ -37,6 +38,9 @@ export async function render(el) {
   // そろっていたビンゴのコインを受け取る
   const bingos = await claimBingos();
   if (bingos.length > 0) showToast(bingoMessage(bingos));
+  // 条件を満たしたトロフィーを受け取る
+  const claimed = await claimTrophies();
+  for (const message of trophyMessages(claimed.found, claimed.ownedBefore)) showToast(message);
 
   const [todays, stamps, wallet] = await Promise.all([
     Promise.all(decks.map((deck) => getDeckToday(deck, settings.graceHour))),
@@ -46,7 +50,10 @@ export async function render(el) {
   const totalCards = todays.reduce((sum, t) => sum + t.cardCount, 0);
 
   el.innerHTML = `
-    <p class="today">${formatDateJa()}</p>
+    <div class="today-row">
+      <p class="today">${formatDateJa()}</p>
+      <a class="title-badge" href="#/trophies" aria-label="称号：${titleOf(wallet.trophies).name}（トロフィーを見る）">🎖 ${titleOf(wallet.trophies).name}</a>
+    </div>
     ${streakCard(stamps, wallet, settings.graceHour)}
     <section>
       <h2 class="section-title">今日の学習</h2>

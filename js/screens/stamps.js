@@ -6,7 +6,9 @@
 // =========================================================
 import {
   listDecks, listOverallStamps, listAchievedDays, getSettings, getWallet, buyItem, useRestTickets, claimBingos,
+  claimTrophies,
 } from '../data.js';
+import { TROPHIES, titleOf, trophyMessages } from '../trophies.js';
 import { escapeHtml, toDateKey } from '../util.js';
 import { streakOf, inGrace, monthWeeks, GOLD_MIN_DECKS } from '../stamps.js';
 import { canBuy } from '../wallet.js';
@@ -27,12 +29,15 @@ export async function render(el, { signal, refresh }) {
   // そろっていたビンゴのコインを受け取る
   const bingos = await claimBingos();
   if (bingos.length > 0) showToast(bingoMessage(bingos));
+  // 条件を満たしたトロフィーを受け取る
+  const claimed = await claimTrophies();
+  for (const message of trophyMessages(claimed.found, claimed.ownedBefore)) showToast(message);
 
   const [decks, overall, wallet] = await Promise.all([listDecks(), listOverallStamps(), getWallet()]);
   const now = new Date();
   const today = toDateKey(now);
   const graceActive = inGrace(now, settings.graceHour);
-  const shopHtml = shopCard(wallet);
+  const shopHtml = trophyLink(wallet.trophies) + shopCard(wallet);
 
   // 見ているタブ（'all' か 単語帳の ID）と月
   let view = loadView();
@@ -155,6 +160,19 @@ export async function render(el, { signal, refresh }) {
   }
 
   await draw();
+}
+
+// トロフィー画面への入り口（取った数と称号）
+function trophyLink(count) {
+  return `
+    <a class="card trophy-link" href="#/trophies">
+      <span class="trophy-icon" aria-hidden="true">🏆</span>
+      <span class="streak-text">
+        <b>トロフィー ${count} / ${TROPHIES.length}</b>
+        <span class="muted">称号：${titleOf(count).name}</span>
+      </span>
+      <span class="chevron" aria-hidden="true">›</span>
+    </a>`;
 }
 
 // コインとアイテムの交換所

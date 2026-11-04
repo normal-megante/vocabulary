@@ -14,6 +14,7 @@ import {
   goalEntry, goldEntry, buyEntry, restEntry, walletOf, canBuy, planRestDays,
 } from './wallet.js';
 import { findBingos, bingoEntry, filledDates } from './bingo.js';
+import { trophyStats, ownedTrophies, newTrophies, trophyEntry } from './trophies.js';
 
 // ---------------- 単語帳 ----------------
 
@@ -355,6 +356,49 @@ export async function claimBingos() {
   };
   await transactionDone(tx);
   return found;
+}
+
+// ---------------- トロフィー（trophies.js） ----------------
+
+// 条件を満たしたトロフィーを受け取る（まだもらっていないものだけ。コインも通帳に入る）
+// （ホーム・スタンプ・トロフィーの画面を開いたとき、学習で達成したとき・終わったときに呼ぶ）
+//   events : いま起きたこと（'nightOwl' 夜ふかし・'earlyBird' 早起き）
+//   → { found: 新しく取ったトロフィー, ownedBefore: その前に持っていた数 }
+export async function claimTrophies(events = []) {
+  const db = await openDB();
+  const tx = db.transaction(['stamps', 'daily', 'progress', 'wallet'], 'readwrite');
+  const stampsRequest = tx.objectStore('stamps').getAll();
+  const dailyRequest = tx.objectStore('daily').getAll();
+  const progressRequest = tx.objectStore('progress').getAll();
+  const walletStore = tx.objectStore('wallet');
+  let result = { found: [], ownedBefore: 0 };
+  walletStore.getAll().onsuccess = (event) => {
+    const entries = event.target.result;
+    const owned = ownedTrophies(entries);
+    const stats = trophyStats({
+      stampList: stampsRequest.result,
+      walletEntries: entries,
+      dailyList: dailyRequest.result,
+      progressList: progressRequest.result,
+      events,
+    });
+    const found = newTrophies(stats, owned);
+    for (const trophy of found) walletStore.put(trophyEntry(trophy));
+    result = { found, ownedBefore: owned.size };
+  };
+  await transactionDone(tx);
+  return result;
+}
+
+// トロフィー画面用：判定に使う数と、取ったトロフィー（key → 取った時刻）
+export async function getTrophyState() {
+  const [stampList, walletEntries, dailyList, progressList] = await Promise.all([
+    getAll('stamps'), getAll('wallet'), getAll('daily'), getAll('progress'),
+  ]);
+  return {
+    stats: trophyStats({ stampList, walletEntries, dailyList, progressList }),
+    owned: ownedTrophies(walletEntries),
+  };
 }
 
 // ---------------- バックアップ用：全データの読み出し・置き換え ----------------
