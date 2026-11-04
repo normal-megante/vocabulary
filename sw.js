@@ -29,6 +29,7 @@ const PRECACHE = [
   'js/srs.js',
   'js/quiz.js',
   'js/stamps.js',
+  'js/wallet.js',
   'js/importer.js',
   'js/backup.js',
   'js/ui.js',

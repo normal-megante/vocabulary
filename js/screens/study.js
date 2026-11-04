@@ -456,8 +456,10 @@ export async function render(el, { params, setTitle, signal }) {
 
     // この1問できょうのぶんを達成したら、スタンプ！
     if (saved.achievedNow) {
-      session.stamp = { gold: saved.goldNow };
-      showToast(saved.goldNow ? '👑 全部の単語帳を達成！ 金色のスタンプ！' : `🎉 「${GOAL_LABEL}」達成！ スタンプゲット！`);
+      session.stamp = { gold: saved.goldNow, coins: saved.coins };
+      showToast(saved.goldNow
+        ? `👑 全部の単語帳を達成！ 金色のスタンプと 🪙${saved.coins} ゲット！`
+        : `🎉 「${GOAL_LABEL}」達成！ スタンプと 🪙${saved.coins} ゲット！`);
     }
 
     // まちがえたら、少しあとにもう一度出す
@@ -498,6 +500,7 @@ export async function render(el, { params, setTitle, signal }) {
         <span class="stamp big${stamp.gold ? ' gold' : ' deck'}" aria-hidden="true">★</span>
         <p><b>${stamp.gold ? '金色のスタンプ！' : 'スタンプゲット！'}</b><br>
           <span class="muted">${stamp.gold ? '全部の単語帳の「' + GOAL_LABEL + '」を達成しました' : `「${GOAL_LABEL}」を達成しました`}${session.late ? '（昨日の分）' : ''}</span></p>
+        ${stamp.coins > 0 ? `<a class="coin-get" href="#/stamps">🪙 +${stamp.coins}</a>` : ''}
       </div>` : '';
 
     el.innerHTML = `

@@ -116,8 +116,10 @@ export async function render(el, { params, setTitle, refresh }) {
     const updated = await updateDeck(deck.id, { dailyGoal, newPerDay, directions });
     // 問題数を下げて、もう届いていたら達成にする（スタンプも見直す）
     const { graceHour } = await getSettings();
-    await recheckDeckToday(updated, graceHour);
-    showToast('設定を保存しました');
+    const recheck = await recheckDeckToday(updated, graceHour);
+    showToast(recheck.achievedNow
+      ? `設定を保存しました。「${GOAL_LABEL}」達成！ ${recheck.goldNow ? '金色の' : ''}スタンプと 🪙${recheck.coins} ゲット！`
+      : '設定を保存しました');
     refresh();
   });
 

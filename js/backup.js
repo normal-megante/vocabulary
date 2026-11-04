@@ -7,16 +7,17 @@
 //     format: 1,                ← ファイルの形のバージョン
 //     appVersion: '0.4.0…',     ← 書き出したときのアプリのバージョン
 //     exportedAt: '2026-11-04T12:34:56.000Z',  ← 書き出した日時
-//     data: { decks: [...], cards: [...], progress: [...], daily: [...], stamps: [...], settings: [...] }
+//     data: { decks: [...], cards: [...], progress: [...], daily: [...], stamps: [...], wallet: [...], settings: [...] }
 //   }
-//   ※ stamps（全体のスタンプ）はステップ7で追加。それより前のバックアップには無いので、
-//      読み込むときに学習記録から作り直す。
+//   ※ stamps（全体のスタンプ）はステップ7、wallet（コインとアイテムの通帳）はステップ8で追加。
+//      それより前のバックアップには無いので、読み込むときに学習記録から作り直す。
 //
 // 画面やデータ保存とは関係のない「計算だけ」のファイル。
 // tests/backup.test.mjs で動きを確かめられる。
 // =========================================================
 import { toDateKey } from './util.js';
 import { rebuildStamps } from './stamps.js';
+import { rebuildWallet } from './wallet.js';
 
 // ファイルの形を変えたときは、この数字を上げて parseBackup() に「古い形の直し方」を足す
 export const BACKUP_FORMAT = 1;
@@ -28,6 +29,7 @@ const STORES = {
   progress: { label: '覚え具合', required: ['id', 'cardId', 'deckId', 'dir'] },
   daily: { label: '学習記録', required: ['id', 'deckId', 'date'] },
   stamps: { label: 'スタンプ', required: ['date'] },
+  wallet: { label: 'コインとアイテム', required: ['id'] },
   settings: { label: '設定', required: ['key'] },
 };
 export const STORE_NAMES = Object.keys(STORES);
@@ -81,6 +83,10 @@ export function parseBackup(text) {
     const rebuilt = rebuildStamps(data.decks, data.daily);
     data.daily = rebuilt.daily;
     data.stamps = rebuilt.stamps;
+  }
+  // 通帳が入っていない古いバックアップ：これまでのスタンプの分のコインを記録する
+  if (!Array.isArray(source.wallet)) {
+    data.wallet = rebuildWallet(data.daily, data.stamps);
   }
 
   return {

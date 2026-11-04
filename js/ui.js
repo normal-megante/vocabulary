@@ -94,16 +94,24 @@ export function promptDialog(message, { value = '', placeholder = '', okLabel = 
   });
 }
 
-// 画面の下に、短いお知らせを2秒ほど出す。
+// 画面の下に、短いお知らせを2秒ほど出す（長い文は少し長めに）。
+// いくつか同時に出たときは、縦に並べる。
 export function showToast(message) {
+  let stack = document.querySelector('.toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.className = 'toast-stack';
+    document.body.append(stack);
+  }
   const toast = document.createElement('div');
   toast.className = 'toast';
   toast.setAttribute('role', 'status');
   toast.textContent = message;
-  document.body.append(toast);
+  stack.append(toast);
   requestAnimationFrame(() => toast.classList.add('show'));
+  const duration = Math.min(5000, 2000 + Math.max(0, message.length - 20) * 60);
   setTimeout(() => {
     toast.classList.remove('show');
     setTimeout(() => toast.remove(), 300);
-  }, 2000);
+  }, duration);
 }

@@ -13,6 +13,10 @@ const sampleData = {
   progress: [{ id: 'c1:f', cardId: 'c1', deckId: 'd1', dir: 'f', level: 1, due: '2026-11-05', reps: 1 }],
   daily: [{ id: 'd1:2026-11-04', deckId: 'd1', date: '2026-11-04', answered: 3, newCount: 1 }],
   stamps: [{ date: '2026-11-04', decks: ['d1'], gold: false }],
+  wallet: [
+    { id: 'goal:d1:2026-11-04', type: 'goal', deckId: 'd1', date: '2026-11-04', coins: 3, at: 1 },
+    { id: 'buy:x1', type: 'buy', item: 'rest', count: 1, coins: -20, at: 2 },
+  ],
   settings: [{ key: 'app', value: { graceHour: 3 } }],
 };
 
@@ -82,4 +86,30 @@ test('スタンプが入っていない古いバックアップは、学習記�
   assert.equal(result.ok, true);
   assert.deepEqual(result.backup.data.daily.map((d) => d.achieved), [true, false]);
   assert.deepEqual(result.backup.data.stamps, [{ date: '2026-11-03', decks: ['d1'], gold: false }]);
+  // 通帳もないので、スタンプの分のコインを記録する
+  assert.deepEqual(result.backup.data.wallet.map((e) => [e.id, e.coins]), [['goal:d1:2026-11-03', 3]]);
+});
+
+test('通帳が入っていないステップ7のバックアップは、スタンプの分のコインを記録する（金色のボーナスも）', () => {
+  const step7 = {
+    app: 'vocabulary',
+    format: 1,
+    appVersion: '0.7.0（ステップ7）',
+    exportedAt: '2026-11-04T12:00:00.000Z',
+    data: {
+      decks: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+      cards: [],
+      progress: [],
+      daily: [
+        { id: 'a:2026-11-04', deckId: 'a', date: '2026-11-04', answered: 5, goal: 5, achieved: true },
+        { id: 'b:2026-11-04', deckId: 'b', date: '2026-11-04', answered: 5, goal: 5, achieved: true },
+      ],
+      stamps: [{ date: '2026-11-04', decks: ['a', 'b'], gold: true }],
+      settings: [],
+    },
+  };
+  const result = parseBackup(JSON.stringify(step7));
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.backup.data.stamps, step7.data.stamps); // スタンプはそのまま
+  assert.deepEqual(result.backup.data.wallet.map((e) => e.id), ['goal:a:2026-11-04', 'goal:b:2026-11-04', 'gold:2026-11-04']);
 });

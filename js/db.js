@@ -10,9 +10,11 @@
 //   progress : 覚え具合の記録（単語 × 出題の向き ごと）
 //   daily    : 日ごとの学習記録（単語帳 × 日付 ごと。きょうのぶん・単語帳ごとのスタンプ用）
 //   stamps   : 全体のスタンプ（日付ごと）
+//   wallet   : コインとアイテムの通帳（出し入れ1回ごとに1行）
 //   settings : アプリ全体の設定
 // =========================================================
 import { rebuildStamps } from './stamps.js';
+import { rebuildWallet } from './wallet.js';
 
 const DB_NAME = 'vocabulary';
 
@@ -21,9 +23,13 @@ const DB_NAME = 'vocabulary';
 // （こうすると、すでに入っているデータを消さずに形を変えられる）
 //   1：最初の形
 //   2：全体のスタンプの棚（stamps）を追加（ステップ7）
-const DB_VERSION = 2;
+//   3：コインとアイテムの通帳（wallet）を追加（ステップ8）
+const DB_VERSION = 3;
 
 function upgrade(db, oldVersion, tx) {
+  // 入っているデータの直し（棚を作ったあとで、1つずつ順番に行う）
+  const fixes = [];
+
   if (oldVersion < 1) {
     db.createObjectStore('decks', { keyPath: 'id' });
 
@@ -42,20 +48,46 @@ function upgrade(db, oldVersion, tx) {
   }
   if (oldVersion < 2) {
     db.createObjectStore('stamps', { keyPath: 'date' });
-    // すでに学習していた分に「達成」の印を付けて、スタンプを押しておく
-    if (oldVersion >= 1) {
-      const decksRequest = tx.objectStore('decks').getAll();
-      const dailyRequest = tx.objectStore('daily').getAll();
-      dailyRequest.onsuccess = () => {
-        const { daily, stamps } = rebuildStamps(decksRequest.result, dailyRequest.result);
-        const dailyStore = tx.objectStore('daily');
-        for (const record of daily) dailyStore.put(record);
-        const stampStore = tx.objectStore('stamps');
-        for (const stamp of stamps) stampStore.put(stamp);
-      };
-    }
+    if (oldVersion >= 1) fixes.push(fixStamps);
   }
-  // 将来 DB_VERSION を 3 にしたら、ここに if (oldVersion < 3) { ... } を書き足す
+  if (oldVersion < 3) {
+    db.createObjectStore('wallet', { keyPath: 'id' });
+    if (oldVersion >= 1) fixes.push(fixWallet);
+  }
+  // 将来 DB_VERSION を 4 にしたら、ここに if (oldVersion < 4) { ... } を書き足す
+
+  runFixes(tx, fixes);
+}
+
+// 直しを1つずつ行う（前の直しの書き込みを、次の直しが読めるように）
+function runFixes(tx, fixes) {
+  const [first, ...rest] = fixes;
+  if (first) first(tx, () => runFixes(tx, rest));
+}
+
+// v2：すでに学習していた分に「達成」の印を付けて、全体のスタンプを押しておく
+function fixStamps(tx, next) {
+  const decksRequest = tx.objectStore('decks').getAll();
+  const dailyRequest = tx.objectStore('daily').getAll();
+  dailyRequest.onsuccess = () => {
+    const { daily, stamps } = rebuildStamps(decksRequest.result, dailyRequest.result);
+    const dailyStore = tx.objectStore('daily');
+    for (const record of daily) dailyStore.put(record);
+    const stampStore = tx.objectStore('stamps');
+    for (const stamp of stamps) stampStore.put(stamp);
+    next();
+  };
+}
+
+// v3：これまでのスタンプの分のコインを、通帳に記録しておく
+function fixWallet(tx, next) {
+  const dailyRequest = tx.objectStore('daily').getAll();
+  const stampsRequest = tx.objectStore('stamps').getAll();
+  stampsRequest.onsuccess = () => {
+    const walletStore = tx.objectStore('wallet');
+    for (const entry of rebuildWallet(dailyRequest.result, stampsRequest.result, Date.now())) walletStore.put(entry);
+    next();
+  };
 }
 
 // ---- 保管庫を開く（最初の1回だけ実際に開き、あとは使い回す） ----

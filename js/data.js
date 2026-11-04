@@ -6,10 +6,13 @@ import {
   openDB, getOne, getAll, getAllByIndex, putOne, putMany, countByIndex, requestToPromise, transactionDone,
 } from './db.js';
 import { STORE_NAMES } from './backup.js';
-import { DECK_DEFAULTS, APP_DEFAULTS } from './defaults.js';
+import { DECK_DEFAULTS, APP_DEFAULTS, COIN_REWARDS } from './defaults.js';
 import { newId, toDateKey } from './util.js';
 import { countAvailable, addDays } from './srs.js';
-import { studyDay, isAchieved, addAnswer, recheckGoal, makeOverallStamp } from './stamps.js';
+import { studyDay, inGrace, isAchieved, addAnswer, recheckGoal, makeOverallStamp } from './stamps.js';
+import {
+  goalEntry, goldEntry, buyEntry, restEntry, walletOf, canBuy, planRestDays,
+} from './wallet.js';
 
 // ---------------- 単語帳 ----------------
 
@@ -172,10 +175,10 @@ export async function getStudyDay(deck, graceHour, now = new Date()) {
 //   day         : 数える日（'2026-11-04' の形）
 //   countsAsNew : 「新しい単語」として数えるか
 //   goal        : この単語帳のきょうのぶんの問題数
-//   → { daily, achievedNow（この1問できょうのぶん達成）, goldNow（全体のスタンプが金色になった） }
+//   → { daily, achievedNow（この1問できょうのぶん達成）, goldNow（全体のスタンプが金色になった）, coins（もらったコイン） }
 export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) {
   const db = await openDB();
-  const tx = db.transaction(['progress', 'daily'], 'readwrite');
+  const tx = db.transaction(['progress', 'daily', 'wallet'], 'readwrite');
   tx.objectStore('progress').put(progress);
   const dailyStore = tx.objectStore('daily');
   let result;
@@ -183,6 +186,8 @@ export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) 
     const current = event.target.result ?? emptyDaily(progress.deckId, day);
     result = addAnswer(current, { grade, countsAsNew, goal });
     dailyStore.put(result.daily);
+    // 達成したらコイン（記録といっしょに保存する）
+    if (result.achievedNow) tx.objectStore('wallet').put(goalEntry(progress.deckId, day));
   };
   await transactionDone(tx);
 
@@ -190,7 +195,12 @@ export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) 
   if (result.achievedNow) {
     ({ goldNow } = await refreshOverallStamp(day));
   }
-  return { daily: result.daily, achievedNow: result.achievedNow, goldNow };
+  return { daily: result.daily, achievedNow: result.achievedNow, goldNow, coins: coinsFor(result.achievedNow, goldNow) };
+}
+
+// 達成したとき・金色になったときに、もらえるコインの数
+function coinsFor(achievedNow, goldNow) {
+  return (achievedNow ? COIN_REWARDS.goal : 0) + (goldNow ? COIN_REWARDS.goldBonus : 0);
 }
 
 // ホーム画面用：単語帳ごとの「今日」のようす（day は数える日）
@@ -214,6 +224,7 @@ export async function getDeckToday(deck, graceHour) {
 // ---------------- スタンプ ----------------
 
 // その日の全体のスタンプを作り直す（単語帳が達成したとき・設定を変えたときに呼ぶ）
+// 金色になったら、ボーナスのコインもいっしょに記録する。
 //   → { stamp, goldNow（いま金色になった） }
 export async function refreshOverallStamp(date) {
   const [decks, dailies, previous] = await Promise.all([
@@ -226,20 +237,37 @@ export async function refreshOverallStamp(date) {
     achievedDeckIds: dailies.filter(isAchieved).map((daily) => daily.deckId),
     activeDeckIds: decks.filter((deck) => deck.dailyGoal > 0 && deck.cardCount > 0).map((deck) => deck.id),
   });
-  if (stamp && JSON.stringify(stamp) !== JSON.stringify(previous)) await putOne('stamps', stamp);
-  return { stamp, goldNow: Boolean(stamp?.gold && !previous?.gold) };
+  const goldNow = Boolean(stamp?.gold && !previous?.gold);
+  if (stamp && JSON.stringify(stamp) !== JSON.stringify(previous)) {
+    const db = await openDB();
+    const tx = db.transaction(['stamps', 'wallet'], 'readwrite');
+    tx.objectStore('stamps').put(stamp);
+    if (goldNow) tx.objectStore('wallet').put(goldEntry(date));
+    await transactionDone(tx);
+  }
+  return { stamp, goldNow };
 }
 
 // 単語帳の問題数を変えたとき：その単語帳の「数える日」の記録を見直す
-// （下げてもう届いていれば達成にする。全体のスタンプも見直す）
+// （下げてもう届いていれば達成にする＝コインも。全体のスタンプも見直す）
+//   → { achievedNow, goldNow, coins }
 export async function recheckDeckToday(deck, graceHour) {
   const { day } = await getStudyDay(deck, graceHour);
   const saved = await getOne('daily', `${deck.id}:${day}`);
+  let achievedNow = false;
   if (saved) {
-    const { daily } = recheckGoal(saved, deck.dailyGoal);
-    if (daily !== saved) await putOne('daily', daily);
+    const result = recheckGoal(saved, deck.dailyGoal);
+    achievedNow = result.achievedNow;
+    if (result.daily !== saved) {
+      const db = await openDB();
+      const tx = db.transaction(['daily', 'wallet'], 'readwrite');
+      tx.objectStore('daily').put(result.daily);
+      if (achievedNow) tx.objectStore('wallet').put(goalEntry(deck.id, day));
+      await transactionDone(tx);
+    }
   }
-  await refreshOverallStamp(day);
+  const { goldNow } = await refreshOverallStamp(day);
+  return { achievedNow, goldNow, coins: coinsFor(achievedNow, goldNow) };
 }
 
 // 全体のスタンプを全部
@@ -250,6 +278,52 @@ export async function listOverallStamps() {
 // この単語帳の、達成した日の記録を全部
 export async function listAchievedDays(deckId) {
   return (await getAllByIndex('daily', 'deckId', deckId)).filter(isAchieved);
+}
+
+// ---------------- コインとアイテム（wallet.js） ----------------
+
+// いまのコイン・持っているアイテム・お休みにした日
+//   → { coins, items: { rest }, restDates }
+export async function getWallet() {
+  return walletOf(await getAll('wallet'));
+}
+
+// コインでアイテムと交換する
+//   → { ok, reason }（できなかったときは reason に理由）
+// 通帳を読む → 交換できるか確かめる → 記録する、を1つのまとまった処理で行う（2回押しても2回買わない）
+export async function buyItem(itemKey) {
+  const db = await openDB();
+  const tx = db.transaction('wallet', 'readwrite');
+  const store = tx.objectStore('wallet');
+  let result;
+  store.getAll().onsuccess = (event) => {
+    result = canBuy(walletOf(event.target.result), itemKey);
+    if (result.ok) store.put(buyEntry(itemKey, newId()));
+  };
+  await transactionDone(tx);
+  return result;
+}
+
+// 連続が切れそうなら、お休みチケットを自動で使う（ホームやスタンプ画面を開いたときに呼ぶ）
+//   → お休みにした日の一覧（使わなかったら []）
+export async function useRestTickets(graceHour, now = new Date()) {
+  const db = await openDB();
+  const tx = db.transaction(['stamps', 'wallet'], 'readwrite');
+  const walletStore = tx.objectStore('wallet');
+  const stampKeys = tx.objectStore('stamps').getAllKeys();
+  let used = [];
+  walletStore.getAll().onsuccess = (event) => {
+    const wallet = walletOf(event.target.result);
+    used = planRestDays({
+      streakDates: new Set([...stampKeys.result, ...wallet.restDates]),
+      tickets: wallet.items.rest,
+      today: toDateKey(now),
+      graceActive: inGrace(now, graceHour),
+    });
+    for (const date of used) walletStore.put(restEntry(date));
+  };
+  await transactionDone(tx);
+  return used;
 }
 
 // ---------------- バックアップ用：全データの読み出し・置き換え ----------------
