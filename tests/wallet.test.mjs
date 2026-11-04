@@ -22,7 +22,9 @@ test('通帳を足して、コインとアイテムの数を出す', () => {
   assert.equal(wallet.coins, COIN_REWARDS.goal * 2 + COIN_REWARDS.goldBonus + 100 - price);
   assert.equal(wallet.items.rest, 0); // 1枚買って、1枚使った
   assert.deepEqual([...wallet.restDates], ['2026-11-03']);
-  assert.deepEqual(walletOf([]), { coins: 0, items: { rest: 0 }, restDates: new Set(), trophies: 0 });
+  assert.deepEqual(walletOf([]), {
+    coins: 0, items: { rest: 0, hint: 0, choices: 0 }, restDates: new Set(), trophies: 0,
+  });
   assert.equal(walletOf([{ id: 'trophy:stamp1', type: 'trophy', trophy: 'stamp1', coins: 5 }]).trophies, 1);
 });
 

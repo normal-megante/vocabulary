@@ -8,20 +8,23 @@
 // 1問ごとに保存するので、途中でやめても、それまでの分は記録されます。
 // （4択・入力は「次へ」を押したときに保存）
 // 夜中の猶予の時間に、前の日のきょうのぶんがまだなら、前の日の分として数えます（stamps.js）。
+// めくる・入力の問題では、アイテム（💡 ヒント・🔢 選択肢表示）を使えます。
+//   使って答えた単語は、正解でも段階を上げずに明日もう一度出します（srs.js の assisted）。
 // =========================================================
 import {
   getDeck, updateDeck, listCards, listProgress, getDaily, recordAnswer, getSettings, getStudyDay, claimTrophies,
+  getWallet, useItem,
 } from '../data.js';
 import { isAchieved } from '../stamps.js';
 import { bingoMessage } from '../bingo.js';
 import { achievementEvents, trophyMessages } from '../trophies.js';
 import { buildQueue, schedule, nextLabel, isNew } from '../srs.js';
 import {
-  FORMATS, buildChoices, canUseChoice, checkTyped, compareKey, pickFormat, questionOf, answerOf,
+  FORMATS, buildChoices, canUseChoice, checkTyped, compareKey, pickFormat, questionOf, answerOf, hintOf,
 } from '../quiz.js';
 import { escapeHtml } from '../util.js';
 import { showToast } from '../ui.js';
-import { GOAL_LABEL, EXTRA_SESSION_SIZE, REASK_GAP } from '../defaults.js';
+import { GOAL_LABEL, EXTRA_SESSION_SIZE, REASK_GAP, ITEMS, ASSIST_INTERVAL } from '../defaults.js';
 
 export const title = '学習';
 
@@ -75,12 +78,14 @@ export async function render(el, { params, setTitle, signal }) {
     queue: [],                // 出す問題の列
     index: 0,                 // いま何問目か
     answered: 0,              // 今回答えた数
-    results: { right: 0, hard: 0, wrong: 0 },
+    results: { right: 0, hard: 0, wrong: 0, assisted: 0 }, // assisted：アイテムを使って答えた数
     stamp: null,              // 今回スタンプをもらったら { gold }
+    items: { hint: 0, choices: 0 }, // 持っているアイテムの数（使ったら減らす）
   };
   let mode = 'picker'; // いまの画面：picker（出し方選び）/ question（問題）/ other
   let current = null;  // いま出している問題のようす
   let busy = false;    // 保存中（ボタンの連打よけ）
+  let assisting = false; // アイテムを使っている途中
 
   // ---- 出す問題の列を作る ----
   async function makeQueue() {
@@ -161,14 +166,15 @@ export async function render(el, { params, setTitle, signal }) {
 
   // ---- 学習を始める（「続ける」でもここから） ----
   async function startSession() {
-    const { queue, day, late } = await makeQueue();
+    const [{ queue, day, late }, wallet] = await Promise.all([makeQueue(), getWallet()]);
     session.queue = queue;
     session.day = day;
     session.late = late;
     session.index = 0;
     session.answered = 0;
-    session.results = { right: 0, hard: 0, wrong: 0 };
+    session.results = { right: 0, hard: 0, wrong: 0, assisted: 0 };
     session.stamp = null;
+    session.items = { hint: wallet.items.hint ?? 0, choices: wallet.items.choices ?? 0 };
     if (queue.length === 0) {
       showNothing();
     } else {
@@ -183,8 +189,21 @@ export async function render(el, { params, setTitle, signal }) {
     const wantsChoices = session.format === 'choice' || session.format === 'auto';
     const choices = wantsChoices ? buildChoices(item.card, item.dir, cards) : null;
     const format = pickFormat(session.format, Boolean(choices));
-    current = { item, format, choices, revealed: false, answered: false, pending: null };
+    current = {
+      item, format, choices, revealed: false, answered: false, pending: null,
+      assist: { hint: false, choices: false }, // この問題で使ったアイテム
+      // 選択肢表示（4択にする）を使えるか：めくる・入力で、4択を作れる単語のとき
+      canChoices: format !== 'choice' && Boolean(choices || buildChoices(item.card, item.dir, cards)),
+    };
+    drawQuestion(true);
+  }
 
+  // アイテムを使ったか
+  const isAssisted = () => Boolean(current && (current.assist.hint || current.assist.choices));
+
+  // いまの問題を画面に書く（animateIn：横から出てくる動きをつけるか）
+  function drawQuestion(animateIn) {
+    const { item, format } = current;
     const question = questionOf(item.card, item.dir);
     const answer = answerOf(item.card, item.dir);
     const percent = Math.round((session.index / session.queue.length) * 100);
@@ -192,8 +211,9 @@ export async function render(el, { params, setTitle, signal }) {
     let badge = '';
     if (isNew(item.progress)) badge = '<span class="tag new">NEW</span>';
     else if (item.kind === 'reask') badge = '<span class="tag again">もう一度</span>';
-    const formatTag = session.format === 'auto'
-      ? `<span class="tag">${FORMATS.find((f) => f.id === format).label}</span>` : '';
+    let formatTag = '';
+    if (current.assist.choices) formatTag = `<span class="tag assist">${ITEMS.choices.icon} 4択にした</span>`;
+    else if (session.format === 'auto') formatTag = `<span class="tag">${FORMATS.find((f) => f.id === format).label}</span>`;
 
     // 答えのあとに見せる例文・メモ（4択では答えの文字は選択肢にあるので出さない）
     const details = `
@@ -219,23 +239,117 @@ export async function render(el, { params, setTitle, signal }) {
         <section ${cardAttrs}>
           <div class="card-tags"><span class="tag">${DIR_LABELS[item.dir]}</span>${formatTag}${badge}</div>
           <div class="card-question ${sizeClass(question)}">${escapeHtml(question)}</div>
+          <div class="hint-slot">${current.assist.hint ? hintHtml(answer) : ''}</div>
           ${answerBlock}
           ${format === 'flip' ? '<p class="tap-hint">タップして答えを見る</p>' : ''}
         </section>
 
+        <div class="assist-row" id="assist-row" hidden></div>
         ${format === 'flip' ? flipActions(item) : ''}
-        ${format === 'choice' ? choiceActions(choices) : ''}
+        ${format === 'choice' ? choiceActions(current.choices) : ''}
         ${format === 'type' ? typeActions() : ''}
       </div>`;
 
     if (format === 'flip') setupFlip();
     if (format === 'choice') setupChoice();
     if (format === 'type') setupType();
+    updateAssistRow();
 
-    animate(el.querySelector('#flashcard'), [
-      { opacity: 0, transform: 'translateX(24px)' },
-      { opacity: 1, transform: 'none' },
-    ], 180);
+    if (animateIn) {
+      animate(el.querySelector('#flashcard'), [
+        { opacity: 0, transform: 'translateX(24px)' },
+        { opacity: 1, transform: 'none' },
+      ], 180);
+    }
+  }
+
+  // =======================================================
+  // アイテム（💡 ヒント・🔢 選択肢表示）
+  // =======================================================
+
+  // アイテムのボタンの列（めくる：めくる前／入力：答える前だけ。どちらも持っていなければ出さない）
+  function updateAssistRow() {
+    const row = el.querySelector('#assist-row');
+    if (!row || !current) return;
+    const open = (current.format === 'flip' && !current.revealed) || (current.format === 'type' && !current.answered);
+    const owns = session.items.hint > 0 || session.items.choices > 0;
+    row.hidden = !open || !(owns || isAssisted());
+    if (row.hidden) {
+      row.innerHTML = '';
+      return;
+    }
+    row.innerHTML = assistButton('hint', 'ヒント') + (current.canChoices ? assistButton('choices', '4択にする') : '');
+    row.querySelectorAll('[data-assist]').forEach((button) => {
+      button.addEventListener('click', () => useAssist(button.dataset.assist));
+    });
+  }
+
+  function assistButton(kind, label) {
+    const used = current.assist[kind];
+    const count = session.items[kind];
+    const note = used ? '使用中' : `×${count}`;
+    return `
+      <button class="btn small assist-btn" type="button" data-assist="${kind}" ${used || count <= 0 ? 'disabled' : ''}
+              aria-label="${ITEMS[kind].name}を使う（のこり${count}${ITEMS[kind].unit}）">
+        <span aria-hidden="true">${ITEMS[kind].icon}</span>${label}<span class="assist-count">${note}</span>
+      </button>`;
+  }
+
+  // アイテムを1つ使う
+  async function useAssist(kind) {
+    if (!current || busy || assisting || current.assist[kind]) return;
+    if (current.format === 'flip' ? current.revealed : current.answered) return;
+    const { item } = current;
+    const built = kind === 'choices' ? (current.choices ?? buildChoices(item.card, item.dir, cards)) : null;
+    if (kind === 'choices' && !built) return;
+
+    assisting = true;
+    let result;
+    try {
+      result = await useItem(kind, { cardId: item.card.id, date: session.day });
+    } catch (error) {
+      console.error(error);
+      showToast('使えませんでした。もう一度押してください。');
+      return;
+    } finally {
+      assisting = false;
+    }
+    session.items[kind] = result.left;
+    if (!result.ok) {
+      showToast(`${ITEMS[kind].name}を持っていません（スタンプ画面の交換所でコインと交換できます）`);
+      updateAssistRow();
+      return;
+    }
+    current.assist[kind] = true;
+
+    if (kind === 'choices') {
+      // その場で4択にする
+      current.format = 'choice';
+      current.choices = built;
+      drawQuestion(false);
+      return;
+    }
+    // ヒントをカードに出す
+    el.querySelector('.hint-slot').innerHTML = hintHtml(answerOf(item.card, item.dir));
+    updateGradeLabels();
+    updateAssistRow();
+    el.querySelector('#type-input')?.focus();
+  }
+
+  // ヒントの表示（最初の1文字と、伏せた文字のマス）
+  function hintHtml(answer) {
+    const { cells, letters } = hintOf(answer);
+    const first = cells.find((cell) => cell.type === 'open')?.ch ?? '';
+    const title = `<span class="hint-title">${ITEMS.hint.icon} ヒント：「${escapeHtml(first)}」から始まる ${letters}文字</span>`;
+    // 長すぎる答えは、マスを出さずに文字だけ
+    if (letters > 30) return `<div class="hint-box">${title}</div>`;
+    const cellHtml = cells.map((cell) => {
+      if (cell.type === 'space') return '<span class="hint-space"></span>';
+      if (cell.type === 'mark') return `<span class="hint-mark">${escapeHtml(cell.ch)}</span>`;
+      if (cell.type === 'open') return `<span class="hint-cell open">${escapeHtml(cell.ch)}</span>`;
+      return '<span class="hint-cell"></span>';
+    }).join('');
+    return `<div class="hint-box">${title}<span class="hint-cells" aria-hidden="true">${cellHtml}</span></div>`;
   }
 
   // =======================================================
@@ -251,10 +365,18 @@ export async function render(el, { params, setTitle, signal }) {
             <button class="btn grade-btn ${g.grade}" type="button" data-grade="${g.grade}">
               <span class="grade-emoji" aria-hidden="true">${g.emoji}</span>
               <span class="grade-label">${g.label}</span>
-              <span class="grade-next">${escapeHtml(nextLabel(item.progress, g.grade, today))}</span>
+              <span class="grade-next">${escapeHtml(nextLabel(item.progress, g.grade, today, { assisted: isAssisted() }))}</span>
             </button>`).join('')}
         </div>
       </div>`;
+  }
+
+  // ヒントを使ったら、採点ボタンの「次はいつ出るか」を書き直す
+  function updateGradeLabels() {
+    el.querySelectorAll('[data-grade]').forEach((button) => {
+      const label = nextLabel(current.item.progress, button.dataset.grade, session.day, { assisted: isAssisted() });
+      button.querySelector('.grade-next').textContent = label;
+    });
   }
 
   function setupFlip() {
@@ -269,8 +391,9 @@ export async function render(el, { params, setTitle, signal }) {
 
   // 答えを見せる（カードをめくる）
   function reveal() {
-    if (!current || current.revealed) return;
+    if (!current || current.revealed || assisting) return;
     current.revealed = true;
+    updateAssistRow();
     const cardEl = el.querySelector('#flashcard');
     const showAnswer = () => {
       cardEl.querySelector('.card-answer').hidden = false;
@@ -312,7 +435,7 @@ export async function render(el, { params, setTitle, signal }) {
   }
 
   function choose(index) {
-    if (!current || current.answered) return;
+    if (!current || current.answered || assisting) return;
     const { choices } = current;
     const right = index === choices.correctIndex;
     current.answered = true;
@@ -375,11 +498,12 @@ export async function render(el, { params, setTitle, signal }) {
 
   // 答え合わせ（text が null なら「わからない」）
   function typed(text) {
-    if (!current || current.answered) return;
+    if (!current || current.answered || assisting) return;
     const { item } = current;
     const right = text !== null && checkTyped(text, answerOf(item.card, item.dir));
     current.answered = true;
     current.pending = right ? 'good' : 'again';
+    updateAssistRow();
 
     const input = el.querySelector('#type-input');
     input.readOnly = true;
@@ -402,10 +526,12 @@ export async function render(el, { params, setTitle, signal }) {
   function showFeedback(right, extraHtml, titleText = null) {
     const { item } = current;
     const today = session.day;
-    const after = schedule(item.progress, current.pending, today);
-    const label = nextLabel(item.progress, current.pending, today);
+    const assisted = isAssisted();
+    const after = schedule(item.progress, current.pending, today, { assisted });
+    const label = nextLabel(item.progress, current.pending, today, { assisted });
     let message;
     if (!right) message = '少しあとに、もう一度出ます。';
+    else if (assisted) message = `アイテムを使ったので、レベルはそのまま。${ASSIST_INTERVAL === 1 ? '明日' : `${ASSIST_INTERVAL}日後に`}もう一度出ます。`;
     else if (label === 'そのまま') message = '予定より前の復習なので、次に出る日はそのままです。';
     else if (after.level > item.progress.level) message = `レベルアップ！ 次は${label}に出ます。`;
     else if (current.pending === 'choice' && after.halfStep) message = `4択の正解は半分ぶん。もう1回正解でレベルアップ！（次は${label}）`;
@@ -430,11 +556,15 @@ export async function render(el, { params, setTitle, signal }) {
   // 答えを保存して、次の問題へ
   // =======================================================
   async function finish(grade) {
-    if (!current || busy || !grade) return;
+    if (!current || busy || assisting || !grade) return;
     busy = true;
     const { item, format } = current;
     const today = session.day;
-    const updated = { ...schedule(item.progress, grade, today), lastFormat: format };
+    const assisted = isAssisted();
+    let lastAssist = null;
+    if (current.assist.choices) lastAssist = 'choices';
+    else if (current.assist.hint) lastAssist = 'hint';
+    const updated = { ...schedule(item.progress, grade, today, { assisted }), lastFormat: format, lastAssist };
     let saved;
     try {
       saved = await recordAnswer({
@@ -443,6 +573,7 @@ export async function render(el, { params, setTitle, signal }) {
         day: today,
         countsAsNew: item.kind === 'new' && isNew(item.progress),
         goal: deck.dailyGoal,
+        assisted,
       });
     } catch (error) {
       console.error(error);
@@ -455,6 +586,7 @@ export async function render(el, { params, setTitle, signal }) {
     if (grade === 'again') session.results.wrong += 1;
     else if (grade === 'hard') session.results.hard += 1;
     else session.results.right += 1;
+    if (assisted) session.results.assisted += 1;
 
     // この1問できょうのぶんを達成したら、スタンプ！
     if (saved.achievedNow) {
@@ -521,6 +653,8 @@ export async function render(el, { params, setTitle, signal }) {
           ${labels.map(([key, label]) => `
             <div class="result-cell ${cellClass[key]}">${label}<b>${session.results[key]}</b></div>`).join('')}
         </div>
+        ${session.results.assisted > 0 ? `
+          <p class="muted fine-print">${ITEMS.hint.icon}${ITEMS.choices.icon} アイテムを使った問題：${session.results.assisted}問（正解でも明日もう一度出ます）</p>` : ''}
         <p>${dayWord(session.late)}の合計：<b>${daily.answered}問</b>
           ${hasGoal ? `<span class="muted">（「${GOAL_LABEL}」${daily.goal ?? deck.dailyGoal}問${done ? '・達成！' : ''}）</span>` : ''}</p>
         <div class="stack">

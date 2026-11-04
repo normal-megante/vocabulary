@@ -584,6 +584,59 @@ a.deck-item:active { background: var(--surface-2); }
 }
 .tap-hint { color: var(--muted); font-size: 13px; }
 
+/* ----- アイテム（ヒント・選択肢表示） ----- */
+.tag.assist { background: rgba(255, 176, 32, 0.25); color: var(--text); }
+.hint-slot:empty { display: none; }
+.hint-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(255, 176, 32, 0.14);
+}
+.hint-title { font-size: 14px; font-weight: 700; }
+.hint-cells {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 5px 4px;
+}
+.hint-cell {
+  display: inline-flex;
+  align-items: flex-end;
+  justify-content: center;
+  width: 22px;
+  height: 30px;
+  border-bottom: 3px solid var(--muted);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+.hint-cell.open { color: var(--primary); border-bottom-color: var(--primary); }
+.hint-space { width: 12px; }
+.hint-mark { font-size: 20px; font-weight: 700; line-height: 30px; }
+
+.assist-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.assist-btn { gap: 4px; }
+.assist-count {
+  margin-left: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 /* 画面の下に固定するボタン置き場（親指で押しやすいように） */
 .study-actions {
   position: sticky;

@@ -60,14 +60,16 @@ function checkGoal(daily, goal) {
 }
 
 // 1問答えたときの記録の更新
+//   assisted : ヒント・選択肢表示を使って答えたか（使った問題の数を assisted に数える）
 //   → { daily: 新しい記録, achievedNow: この1問で達成したか }
-export function addAnswer(daily, { grade, countsAsNew, goal }) {
+export function addAnswer(daily, { grade, countsAsNew, goal, assisted = false }) {
   const next = {
     ...daily,
     answered: (daily.answered ?? 0) + 1,
     [grade]: (daily[grade] ?? 0) + 1,
     newCount: (daily.newCount ?? 0) + (countsAsNew ? 1 : 0),
   };
+  if (assisted) next.assisted = (daily.assisted ?? 0) + 1;
   return checkGoal(next, goal);
 }
 

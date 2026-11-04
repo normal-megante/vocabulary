@@ -11,7 +11,7 @@ import { newId, toDateKey } from './util.js';
 import { countAvailable, addDays } from './srs.js';
 import { studyDay, inGrace, isAchieved, addAnswer, recheckGoal, makeOverallStamp } from './stamps.js';
 import {
-  goalEntry, goldEntry, buyEntry, restEntry, walletOf, canBuy, planRestDays,
+  goalEntry, goldEntry, buyEntry, restEntry, useEntry, walletOf, canBuy, planRestDays,
 } from './wallet.js';
 import { findBingos, bingoEntry, filledDates } from './bingo.js';
 import { trophyStats, ownedTrophies, newTrophies, trophyEntry } from './trophies.js';
@@ -150,7 +150,7 @@ export async function listProgressForCard(cardId) {
 
 // 日ごとの学習記録の形：
 //   { id, deckId, date, answered（解いた数）, newCount（新しく出した単語の数）,
-//     good, hard, again, choice（それぞれの答えの数）,
+//     good, hard, again, choice（それぞれの答えの数）, assisted（ヒント・選択肢表示を使った問題の数）,
 //     goal（その日のきょうのぶんの問題数）, achieved（達成した ＝ 単語帳のスタンプ） }
 // date は「数える日」。猶予の時間（夜中）に前の日の分として数えたときは、前の日の日付になる。
 function emptyDaily(deckId, date) {
@@ -177,9 +177,10 @@ export async function getStudyDay(deck, graceHour, now = new Date()) {
 //   day         : 数える日（'2026-11-04' の形）
 //   countsAsNew : 「新しい単語」として数えるか
 //   goal        : この単語帳のきょうのぶんの問題数
+//   assisted    : ヒント・選択肢表示を使って答えたか
 //   → { daily, achievedNow（この1問できょうのぶん達成）, goldNow（全体のスタンプが金色になった）,
 //       coins（達成・金色でもらったコイン）, bingos（この達成でそろったビンゴ） }
-export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) {
+export async function recordAnswer({ progress, grade, day, countsAsNew, goal, assisted = false }) {
   const db = await openDB();
   const tx = db.transaction(['progress', 'daily', 'wallet'], 'readwrite');
   tx.objectStore('progress').put(progress);
@@ -187,7 +188,7 @@ export async function recordAnswer({ progress, grade, day, countsAsNew, goal }) 
   let result;
   dailyStore.get(`${progress.deckId}:${day}`).onsuccess = (event) => {
     const current = event.target.result ?? emptyDaily(progress.deckId, day);
-    result = addAnswer(current, { grade, countsAsNew, goal });
+    result = addAnswer(current, { grade, countsAsNew, goal, assisted });
     dailyStore.put(result.daily);
     // 達成したらコイン（記録といっしょに保存する）
     if (result.achievedNow) tx.objectStore('wallet').put(goalEntry(progress.deckId, day));
@@ -311,6 +312,28 @@ export async function buyItem(itemKey) {
   store.getAll().onsuccess = (event) => {
     result = canBuy(walletOf(event.target.result), itemKey);
     if (result.ok) store.put(buyEntry(itemKey, newId()));
+  };
+  await transactionDone(tx);
+  return result;
+}
+
+// 学習中にアイテム（ヒント・選択肢表示）を1つ使う
+//   info : { cardId, date }（どの単語で・どの学習日に使ったか。通帳に残す）
+//   → { ok: 使えたか, left: 残りの数 }
+// 通帳を読む → 持っているか確かめる → 記録する、を1つのまとまった処理で行う
+export async function useItem(itemKey, info = {}) {
+  const db = await openDB();
+  const tx = db.transaction('wallet', 'readwrite');
+  const store = tx.objectStore('wallet');
+  let result = { ok: false, left: 0 };
+  store.getAll().onsuccess = (event) => {
+    const have = walletOf(event.target.result).items[itemKey] ?? 0;
+    if (have > 0) {
+      store.put(useEntry(itemKey, newId(), info));
+      result = { ok: true, left: have - 1 };
+    } else {
+      result = { ok: false, left: 0 };
+    }
   };
   await transactionDone(tx);
   return result;

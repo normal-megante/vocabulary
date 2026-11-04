@@ -6,7 +6,8 @@
 //   type：'goal' … 単語帳の「きょうのぶん」を達成（id ＝ 'goal:単語帳ID:日付'）
 //         'gold' … 金色のスタンプのボーナス（id ＝ 'gold:日付'）
 //         'buy'  … コインでアイテムと交換（id ＝ 'buy:ランダムな文字'）
-//         'use'  … アイテムを使った（お休みチケットは id ＝ 'rest:お休みにした日'）
+//         'use'  … アイテムを使った（お休みチケットは id ＝ 'rest:お休みにした日'、
+//                  ヒント・選択肢表示は id ＝ 'use:ランダムな文字'）
 //         'bingo'  … スタンプカードのビンゴ（bingo.js。id ＝ 'bingo:2026-11:row1' など）
 //         'trophy' … トロフィー（trophies.js。id ＝ 'trophy:streak3' など）
 // ・同じ id は1回しか記録されないので、同じ日に同じ単語帳で2回コインをもらうことはない。
@@ -35,6 +36,11 @@ export function buyEntry(itemKey, uniqueId, at = Date.now()) {
 
 export function restEntry(date, at = Date.now()) {
   return { id: `rest:${date}`, type: 'use', item: 'rest', count: -1, date, coins: 0, at };
+}
+
+// 学習中にアイテム（ヒント・選択肢表示）を使った（cardId：どの単語で使ったか）
+export function useEntry(itemKey, uniqueId, { cardId = null, date = null } = {}, at = Date.now()) {
+  return { id: `use:${uniqueId}`, type: 'use', item: itemKey, count: -1, coins: 0, cardId, date, at };
 }
 
 // ---------------------------------------------------------

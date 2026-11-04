@@ -105,6 +105,32 @@ export function checkTyped(input, answer) {
 }
 
 // ---------------------------------------------------------
+// ヒント（アイテム）
+// ---------------------------------------------------------
+
+// 伏せずにそのまま見せる文字（空白・区切り・かっこ・記号）
+const HINT_KEEP = /[\s、,，/／;；()（）・\-‐－~〜.。!?！？'’"“”「」]/;
+
+// 答えの最初の1文字だけ見せて、ほかの文字は伏せる（空白や区切りの記号はそのまま見せる）
+//   'apple'   → a ＿ ＿ ＿ ＿（5文字）
+//   'take off' → t ＿ ＿ ＿ ␣ ＿ ＿ ＿（7文字）
+//   → { cells: [{ type: 'open'（見せる文字）| 'blank'（伏せた文字）| 'mark'（記号）| 'space', ch }],
+//       letters: 文字数（記号・空白は数えない） }
+export function hintOf(answer) {
+  let opened = false;
+  let letters = 0;
+  const cells = [...String(answer ?? '').trim()].map((ch) => {
+    if (/\s/.test(ch)) return { type: 'space', ch: ' ' };
+    if (HINT_KEEP.test(ch)) return { type: 'mark', ch };
+    letters++;
+    if (opened) return { type: 'blank', ch: '' };
+    opened = true;
+    return { type: 'open', ch };
+  });
+  return { cells, letters };
+}
+
+// ---------------------------------------------------------
 // おまかせ
 // ---------------------------------------------------------
 

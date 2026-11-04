@@ -11,11 +11,12 @@
 //   lastResult   : 最後の答え（good / hard / again / choice）
 //   halfStep     : 4択の正解が「半分」たまっている（true のとき、次の4択の正解で段階 +1）
 //   lastFormat   : 最後に答えた出し方（flip / choice / type。学習画面が記録する）
+//   lastAssist   : 最後に答えたときに使ったアイテム（'hint' / 'choices'。使っていなければ null。学習画面が記録する）
 //
 // 画面やデータ保存とは関係のない「計算だけ」のファイル。
 // tests/srs.test.mjs で動きを確かめられる。
 // =========================================================
-import { INTERVALS } from './defaults.js';
+import { INTERVALS, ASSIST_INTERVAL } from './defaults.js';
 import { toDateKey } from './util.js';
 
 export const MAX_LEVEL = INTERVALS.length - 1;
@@ -77,14 +78,20 @@ export function daysBetween(fromKey, toKey) {
 //           'again'  : 忘れてた・不正解 → 段階0、今日もう一度
 // ※ 予定の日より前に解いた（前倒し）ときに正解なら、記録は変えない。
 //    （1日に何度も解いて、段階が一気に上がりすぎないように）
+// ※ assisted（ヒント・選択肢表示を使った）ときは、正解でも段階を上げずに、明日もう一度出す
+//    （ASSIST_INTERVAL 日後）。あやしいなら段階 −1（最低1）で、やはり明日。忘れてた・不正解はいつもと同じ。
 // ---------------------------------------------------------
-export function schedule(progress, grade, today) {
+export function schedule(progress, grade, today, { assisted = false } = {}) {
   const wasNew = isNew(progress);
   const early = !wasNew && progress.due > today;
   let { level, due, lapses } = progress;
   let halfStep = progress.halfStep ?? false;
 
-  if (grade === 'good') {
+  if (assisted && grade !== 'again') {
+    if (grade === 'hard') level = Math.max(1, level - 1);
+    due = addDays(today, ASSIST_INTERVAL);
+    halfStep = false;
+  } else if (grade === 'good') {
     if (!early) {
       level = Math.min(MAX_LEVEL, level + 1);
       due = addDays(today, INTERVALS[level]);
@@ -125,9 +132,9 @@ export function schedule(progress, grade, today) {
 }
 
 // ボタンの下に出す「次はいつ出るか」の言葉
-export function nextLabel(progress, grade, today) {
+export function nextLabel(progress, grade, today, options = {}) {
   if (grade === 'again') return 'もう一度';
-  const next = schedule(progress, grade, today);
+  const next = schedule(progress, grade, today, options);
   if (!isNew(progress) && next.due === progress.due && next.level === progress.level) return 'そのまま';
   const days = daysBetween(today, next.due);
   if (days <= 0) return '今日';
